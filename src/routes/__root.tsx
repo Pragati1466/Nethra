@@ -11,6 +11,7 @@ import { useEffect, type ReactNode } from "react";
 
 import appCss from "../styles.css?url";
 import { reportLovableError } from "../lib/lovable-error-reporting";
+import { ThemeProvider } from "../lib/theme-provider";
 
 function NotFoundComponent() {
   return (
@@ -85,7 +86,9 @@ function RootComponent() {
   const { queryClient } = Route.useRouteContext();
   return (
     <QueryClientProvider client={queryClient}>
-      <Outlet />
+      <ThemeProvider defaultTheme="dark" storageKey="nethra-ui-theme">
+        <Outlet />
+      </ThemeProvider>
     </QueryClientProvider>
   );
 }

@@ -1,7 +1,8 @@
 import { Link, useRouterState } from "@tanstack/react-router";
-import { Activity, Radio, CalendarPlus, Map, Bot, History, PlayCircle, Shield, Route as RouteIcon, Users, Brain, FileText } from "lucide-react";
+import { Activity, Radio, CalendarPlus, Map, Bot, History, PlayCircle, Shield, Route as RouteIcon, Users, Brain, FileText, Moon, Sun } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
 import { cn } from "@/lib/utils";
+import { useTheme } from "@/lib/theme-provider";
 
 type NavItem = { to: string; label: string; icon: typeof Radio; end?: boolean };
 const nav: NavItem[] = [
@@ -74,6 +75,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 
 function TopBar() {
   const [now, setNow] = useState<string>("--:--:--");
+  const { theme, setTheme } = useTheme();
   useEffect(() => {
     const tick = () => setNow(new Date().toLocaleTimeString("en-IN", { hour12: false }));
     tick();
@@ -92,6 +94,17 @@ function TopBar() {
         <Badge tone="success">3 events active</Badge>
         <Badge tone="warning">2 alerts</Badge>
         <Badge tone="info">12 units deployed</Badge>
+        <button
+          onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
+          className="p-1.5 rounded-md hover:bg-accent/40 border border-transparent hover:border-border transition-colors"
+          aria-label="Toggle theme"
+        >
+          {theme === "dark" ? (
+            <Sun className="size-4 text-foreground" />
+          ) : (
+            <Moon className="size-4 text-foreground" />
+          )}
+        </button>
       </div>
     </header>
   );
