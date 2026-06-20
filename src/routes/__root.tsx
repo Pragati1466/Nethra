@@ -17,15 +17,28 @@ import { Toaster } from "sonner";
 function NotFoundComponent() {
   return (
     <div className="flex min-h-screen items-center justify-center bg-background px-4">
-      <div className="max-w-md text-center">
-        <h1 className="text-7xl font-bold text-foreground">404</h1>
-        <h2 className="mt-4 text-xl font-semibold text-foreground">Page not found</h2>
-        <p className="mt-2 text-sm text-muted-foreground">The page you're looking for doesn't exist.</p>
-        <div className="mt-6">
-          <Link to="/" className="inline-flex items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90">
-            Go to Command Center
-          </Link>
+      <div className="max-w-lg text-center">
+        <div className="mb-8 flex justify-center">
+          <svg className="w-64 h-64" viewBox="0 0 200 200" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <circle cx="100" cy="100" r="80" fill="var(--primary)" fillOpacity="0.1" />
+            <circle cx="100" cy="100" r="60" fill="var(--primary)" fillOpacity="0.15" />
+            <path d="M100 40 L100 100 L140 120" stroke="var(--primary)" strokeWidth="3" fill="none" strokeLinecap="round" />
+            <circle cx="100" cy="100" r="8" fill="var(--primary)" />
+            <circle cx="140" cy="120" r="5" fill="var(--primary)" fillOpacity="0.6" />
+            <path d="M60 140 Q100 180 140 140" stroke="var(--primary)" strokeWidth="2" fill="none" strokeDasharray="5,5" opacity="0.5" />
+            <text x="100" y="75" textAnchor="middle" fill="var(--foreground)" fontSize="48" fontWeight="bold" fontFamily="monospace">404</text>
+          </svg>
         </div>
+        <h1 className="text-3xl font-bold text-foreground mb-2">Route Not Found</h1>
+        <p className="text-muted-foreground mb-8 max-w-md mx-auto">
+          The operational route you're trying to access doesn't exist or has been decommissioned. Let's get you back to command center.
+        </p>
+        <Link 
+          to="/" 
+          className="inline-flex items-center justify-center gap-2 rounded-md bg-primary text-primary-foreground px-6 py-3 text-sm font-medium hover:bg-primary/90 transition-colors"
+        >
+          Return to Command Center
+        </Link>
       </div>
     </div>
   );
