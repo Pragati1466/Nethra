@@ -4,6 +4,7 @@ import { AppShell, Panel, Badge } from "@/components/nethra/AppShell";
 import { CityMap, type MapUnit } from "@/components/nethra/CityMap";
 import { MetricStat } from "@/components/nethra/RiskGauge";
 import { LiveFeed, TrafficPulse, ActiveDeployments, DynamicAlerts } from "@/components/nethra/LiveOps";
+import { ShareButton } from "@/components/ui/share-button";
 import { usePulse } from "@/lib/pulse";
 import { getEvents, subscribe, predictImpact, riskBand, INCIDENTS } from "@/lib/intel";
 import { ArrowRight, Plus, AlertTriangle, Users, Radio, Bot } from "lucide-react";
@@ -49,12 +50,15 @@ function CommandCenter() {
               All upcoming and live events, ranked by operational risk. Click an event to plan, deploy, or monitor it.
             </p>
           </div>
-          <Link
-            to="/events/new"
-            className="inline-flex items-center gap-2 rounded-md bg-primary text-primary-foreground px-3.5 py-2 text-sm font-medium hover:bg-primary/90 transition"
-          >
-            <Plus className="size-4" /> Create Event
-          </Link>
+          <div className="flex items-center gap-2">
+            <ShareButton />
+            <Link
+              to="/events/new"
+              className="inline-flex items-center gap-2 rounded-md bg-primary text-primary-foreground px-3.5 py-2 text-sm font-medium hover:bg-primary/90 transition"
+            >
+              <Plus className="size-4" /> Create Event
+            </Link>
+          </div>
         </div>
 
         {/* KPIs — live */}

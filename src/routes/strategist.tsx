@@ -2,6 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
 import { AppShell, Panel, Badge } from "@/components/nethra/AppShell";
 import { Skeleton } from "@/components/ui/skeleton";
+import { ShareButton } from "@/components/ui/share-button";
 import { EVENT_KINDS, getEvents, INCIDENTS, nearbyIncidents, predictImpact, riskBand } from "@/lib/intel";
 import { Bot, Send, Sparkles, User } from "lucide-react";
 import { toast } from "sonner";
@@ -92,9 +93,12 @@ function StrategistPage() {
   return (
     <AppShell>
       <div className="p-4 lg:p-6 grid grid-cols-12 gap-4 h-[calc(100vh-3rem)]">
-        <div className="col-span-12">
-          <div className="text-[11px] font-mono uppercase tracking-[0.2em] text-primary">AI Strategist</div>
-          <h1 className="text-2xl font-semibold mt-1">Operational reasoning, on demand</h1>
+        <div className="col-span-12 flex items-end justify-between gap-3">
+          <div>
+            <div className="text-[11px] font-mono uppercase tracking-[0.2em] text-primary">AI Strategist</div>
+            <h1 className="text-2xl font-semibold mt-1">Operational reasoning, on demand</h1>
+          </div>
+          <ShareButton />
         </div>
 
         {isLoading ? (

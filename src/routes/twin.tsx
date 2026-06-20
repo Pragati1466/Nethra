@@ -4,6 +4,7 @@ import { AppShell, Panel, Badge } from "@/components/nethra/AppShell";
 import { TwinMap, type LayerToggles } from "@/components/nethra/TwinMap";
 import { TimeScrubber } from "@/components/nethra/TimeScrubber";
 import { Skeleton } from "@/components/ui/skeleton";
+import { ShareButton } from "@/components/ui/share-button";
 import { getEvents, subscribe, INCIDENTS, predictImpact, riskBand } from "@/lib/intel";
 import { cellIntensity, formatHourOfWeek } from "@/lib/timefield";
 import { HEX_CELLS } from "@/data/hexgrid";
@@ -111,6 +112,7 @@ function TwinPage() {
                 </p>
               </div>
               <div className="flex items-center gap-2">
+                <ShareButton />
                 <Badge tone={cityStats.congestionTier === "SEVERE" ? "critical" : cityStats.congestionTier === "HIGH" ? "warning" : cityStats.congestionTier === "MODERATE" ? "info" : "success"}>
                   {cityStats.congestionTier}
                 </Badge>
