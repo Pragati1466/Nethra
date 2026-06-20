@@ -1,16 +1,5 @@
 {
   "buildCommand": "bun run build",
-  "outputDirectory": "dist",
-  "rewrites": [
-    {
-      "source": "/(.*)",
-      "destination": "/api/index"
-    }
-  ],
-  "functions": {
-    "api/index.js": {
-      "runtime": "nodejs20.x",
-      "source": "dist/server/server.js"
-    }
-  }
+  "outputDirectory": "dist/client",
+  "framework": null
 }
