@@ -4,6 +4,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import { cn } from "@/lib/utils";
 import { useTheme } from "@/lib/theme-provider";
 import { BackToTop } from "@/components/ui/back-to-top";
+import { Footer } from "@/components/nethra/Footer";
 
 type NavItem = { to: string; label: string; icon: typeof Radio; end?: boolean };
 const nav: NavItem[] = [
@@ -70,6 +71,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         <TopBar />
         <main className="flex-1 min-w-0">{children}</main>
         <BackToTop />
+        <Footer />
       </div>
     </div>
   );
