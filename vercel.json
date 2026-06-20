@@ -1,11 +1,11 @@
 {
   "buildCommand": "bun run build",
-  "outputDirectory": "dist/server",
+  "outputDirectory": "dist",
   "framework": null,
   "rewrites": [
     {
       "source": "/(.*)",
-      "destination": "/server.js"
+      "destination": "/server/server.js"
     }
   ]
 }
