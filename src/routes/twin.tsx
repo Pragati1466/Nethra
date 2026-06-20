@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import { AppShell, Panel, Badge } from "@/components/nethra/AppShell";
 import { TwinMap, type LayerToggles } from "@/components/nethra/TwinMap";
 import { TimeScrubber } from "@/components/nethra/TimeScrubber";
+import { Skeleton } from "@/components/ui/skeleton";
 import { getEvents, subscribe, INCIDENTS, predictImpact, riskBand } from "@/lib/intel";
 import { cellIntensity, formatHourOfWeek } from "@/lib/timefield";
 import { HEX_CELLS } from "@/data/hexgrid";
@@ -29,7 +30,12 @@ const NORMALIZER = (MAX_TOTAL / 168) * 2.0 * 10 * 0.55;
 
 function TwinPage() {
   const [events, setEvents] = useState(getEvents());
-  useEffect(() => subscribe(() => setEvents([...getEvents()])), []);
+  const [isLoading, setIsLoading] = useState(true);
+  useEffect(() => {
+    subscribe(() => setEvents([...getEvents()]));
+    // Simulate loading state
+    setTimeout(() => setIsLoading(false), 500);
+  }, []);
 
   // Seed clock: Friday 18:00 UTC ≈ Fri 23:30 IST — peak Bengaluru chaos hour for first impression.
   const [hourOfWeek, setHourOfWeek] = useState(5 * 24 + 13);
@@ -66,23 +72,52 @@ function TwinPage() {
   return (
     <AppShell>
       <div className="p-4 lg:p-6 space-y-4">
-        <div className="flex items-end justify-between gap-3 flex-wrap">
-          <div>
-            <div className="text-[11px] font-mono uppercase tracking-[0.2em] text-primary">Digital Twin</div>
-            <h1 className="text-2xl font-semibold mt-1">Bengaluru · Operational Reality Layer</h1>
-            <p className="text-sm text-muted-foreground mt-1 max-w-2xl">
-              {INCIDENTS.length.toLocaleString()} historical incidents binned into {HEX_CELLS.length} H3 hex cells across the BBMP area.
-              Scrub the week to watch the city breathe; live events overlay on top.
-            </p>
-          </div>
-          <div className="flex items-center gap-2">
-            <Badge tone={cityStats.congestionTier === "SEVERE" ? "critical" : cityStats.congestionTier === "HIGH" ? "warning" : cityStats.congestionTier === "MODERATE" ? "info" : "success"}>
-              {cityStats.congestionTier}
-            </Badge>
-            <Badge tone="info">{cityStats.activeHexes} active hexes</Badge>
-            <Badge tone="muted">{formatHourOfWeek(hourOfWeek)}</Badge>
-          </div>
-        </div>
+        {isLoading ? (
+          <>
+            <div className="flex items-end justify-between gap-3 flex-wrap">
+              <div className="space-y-2">
+                <Skeleton className="h-4 w-32" />
+                <Skeleton className="h-8 w-80" />
+                <Skeleton className="h-4 w-96" />
+              </div>
+              <div className="flex items-center gap-2">
+                <Skeleton className="h-6 w-20" />
+                <Skeleton className="h-6 w-24" />
+                <Skeleton className="h-6 w-20" />
+              </div>
+            </div>
+            <div className="grid grid-cols-12 gap-4">
+              <div className="col-span-12 lg:col-span-9">
+                <Skeleton className="h-[calc(100vh-18rem)] min-h-[520px] w-full rounded-lg" />
+              </div>
+              <div className="col-span-12 lg:col-span-3 space-y-4">
+                <Skeleton className="h-40 w-full rounded-lg" />
+                <Skeleton className="h-72 w-full rounded-lg" />
+              </div>
+              <div className="col-span-12">
+                <Skeleton className="h-16 w-full rounded-lg" />
+              </div>
+            </div>
+          </>
+        ) : (
+          <>
+            <div className="flex items-end justify-between gap-3 flex-wrap">
+              <div>
+                <div className="text-[11px] font-mono uppercase tracking-[0.2em] text-primary">Digital Twin</div>
+                <h1 className="text-2xl font-semibold mt-1">Bengaluru · Operational Reality Layer</h1>
+                <p className="text-sm text-muted-foreground mt-1 max-w-2xl">
+                  {INCIDENTS.length.toLocaleString()} historical incidents binned into {HEX_CELLS.length} H3 hex cells across the BBMP area.
+                  Scrub the week to watch the city breathe; live events overlay on top.
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
+                <Badge tone={cityStats.congestionTier === "SEVERE" ? "critical" : cityStats.congestionTier === "HIGH" ? "warning" : cityStats.congestionTier === "MODERATE" ? "info" : "success"}>
+                  {cityStats.congestionTier}
+                </Badge>
+                <Badge tone="info">{cityStats.activeHexes} active hexes</Badge>
+                <Badge tone="muted">{formatHourOfWeek(hourOfWeek)}</Badge>
+              </div>
+            </div>
 
         <div className="grid grid-cols-12 gap-4">
           {/* Main map (plain div so the absolute children get a proper containing block) */}
@@ -195,6 +230,8 @@ function TwinPage() {
             <TimeScrubber hourOfWeek={hourOfWeek} onChange={setHourOfWeek} />
           </div>
         </div>
+        </>
+        )}
       </div>
     </AppShell>
   );

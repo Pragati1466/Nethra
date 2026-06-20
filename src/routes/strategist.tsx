@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
 import { AppShell, Panel, Badge } from "@/components/nethra/AppShell";
+import { Skeleton } from "@/components/ui/skeleton";
 import { EVENT_KINDS, getEvents, INCIDENTS, nearbyIncidents, predictImpact, riskBand } from "@/lib/intel";
 import { Bot, Send, Sparkles, User } from "lucide-react";
 
@@ -67,8 +68,15 @@ function StrategistPage() {
   const [msgs, setMsgs] = useState<Msg[]>([
     { role: "assistant", text: "I'm the NETHRA Traffic Strategist. I read every event in the queue and 8,000+ historical incidents. Ask me what to do next." },
   ]);
+  const [isLoading, setIsLoading] = useState(true);
   const endRef = useRef<HTMLDivElement>(null);
-  useEffect(() => endRef.current?.scrollIntoView({ behavior: "smooth" }), [msgs]);
+  useEffect(() => {
+    endRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [msgs]);
+  useEffect(() => {
+    // Simulate loading state
+    setTimeout(() => setIsLoading(false), 500);
+  }, []);
 
   function send(text: string) {
     const q = text.trim(); if (!q) return;
@@ -85,6 +93,50 @@ function StrategistPage() {
           <h1 className="text-2xl font-semibold mt-1">Operational reasoning, on demand</h1>
         </div>
 
+        {isLoading ? (
+          <>
+            <Panel title="Conversation" className="col-span-12 lg:col-span-8 flex flex-col min-h-0">
+              <div className="flex-1 overflow-auto p-4 space-y-4">
+                <div className="flex gap-3">
+                  <Skeleton className="size-8 shrink-0 rounded-md" />
+                  <div className="flex-1 space-y-2">
+                    <Skeleton className="h-4 w-3/4" />
+                    <Skeleton className="h-4 w-1/2" />
+                  </div>
+                </div>
+                <div className="flex gap-3 justify-end">
+                  <div className="flex-1 space-y-2">
+                    <Skeleton className="h-4 w-1/2 ml-auto" />
+                  </div>
+                  <Skeleton className="size-8 shrink-0 rounded-md" />
+                </div>
+                <div className="flex gap-3">
+                  <Skeleton className="size-8 shrink-0 rounded-md" />
+                  <div className="flex-1 space-y-2">
+                    <Skeleton className="h-4 w-2/3" />
+                    <Skeleton className="h-4 w-1/3" />
+                  </div>
+                </div>
+              </div>
+              <div className="border-t border-border p-3 flex gap-2">
+                <Skeleton className="flex-1 h-10 rounded-md" />
+                <Skeleton className="h-10 w-20 rounded-md" />
+              </div>
+            </Panel>
+
+            <Panel title="Suggested questions" className="col-span-12 lg:col-span-4">
+              <div className="p-3 space-y-2">
+                {[1, 2, 3, 4, 5].map((i) => (
+                  <Skeleton key={i} className="h-10 w-full rounded-md" />
+                ))}
+                <div className="pt-3 border-t border-border mt-3">
+                  <Skeleton className="h-6 w-32 rounded-md" />
+                </div>
+              </div>
+            </Panel>
+          </>
+        ) : (
+          <>
         <Panel title="Conversation" className="col-span-12 lg:col-span-8 flex flex-col min-h-0">
           <div className="flex-1 overflow-auto p-4 space-y-4">
             {msgs.map((m, i) => (
@@ -151,6 +203,8 @@ function StrategistPage() {
             </div>
           </div>
         </Panel>
+        </>
+        )}
       </div>
     </AppShell>
   );
