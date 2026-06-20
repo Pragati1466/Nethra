@@ -1,0 +1,181 @@
+import { createFileRoute, Link, notFound, useNavigate } from "@tanstack/react-router";
+import { useEffect, useMemo, useState } from "react";
+import { AppShell, Panel, Badge } from "@/components/nethra/AppShell";
+import { CityMap } from "@/components/nethra/CityMap";
+import { RiskGauge, MetricStat } from "@/components/nethra/RiskGauge";
+import { EVENT_KINDS, getEvent, predictImpact, riskBand, subscribe, updateEvent } from "@/lib/intel";
+import { ArrowLeft, Bot, CheckCircle2, History, Play, Radio, Route as RouteIcon, ShieldCheck, Users } from "lucide-react";
+
+export const Route = createFileRoute("/events/$eventId")({
+  component: EventPage,
+  notFoundComponent: () => (
+    <AppShell><div className="p-10 text-center text-muted-foreground">Event not found. <Link to="/" className="text-primary">Back to ops</Link></div></AppShell>
+  ),
+  loader: ({ params }) => {
+    const e = getEvent(params.eventId);
+    if (!e) throw notFound();
+    return null;
+  },
+});
+
+function EventPage() {
+  const { eventId } = Route.useParams();
+  const navigate = useNavigate();
+  const [, force] = useState(0);
+  useEffect(() => subscribe(() => force((n) => n + 1)), []);
+
+  const event = getEvent(eventId);
+  const prediction = useMemo(
+    () => event ? predictImpact({ kind: event.kind, lat: event.lat, lng: event.lng, crowd: event.crowd, durationHours: event.durationHours }) : null,
+    [event],
+  );
+
+  if (!event || !prediction) return null;
+  const band = riskBand(prediction.riskScore);
+  const kindLabel = EVENT_KINDS.find((k) => k.id === event.kind)?.label ?? event.kind;
+
+  return (
+    <AppShell>
+      <div className="p-4 lg:p-6 grid grid-cols-12 gap-4">
+        {/* Header */}
+        <div className="col-span-12 flex flex-wrap items-start justify-between gap-3">
+          <div className="min-w-0">
+            <button onClick={() => navigate({ to: "/" })} className="text-xs font-mono text-muted-foreground hover:text-foreground inline-flex items-center gap-1 mb-2">
+              <ArrowLeft className="size-3.5" /> Command Center
+            </button>
+            <div className="flex items-center gap-2 flex-wrap">
+              <h1 className="text-2xl font-semibold">{event.name}</h1>
+              <Badge tone={event.status === "live" ? "critical" : event.status === "deployed" ? "info" : event.status === "planned" ? "warning" : "muted"}>
+                {event.status}
+              </Badge>
+              <Badge tone={band.tone}>Risk {prediction.riskScore}</Badge>
+            </div>
+            <p className="text-sm text-muted-foreground mt-1">{kindLabel} · {event.address}</p>
+            <p className="text-xs font-mono text-muted-foreground mt-0.5">
+              Starts {new Date(event.startsAt).toLocaleString()} · {event.durationHours}h · <Users className="inline size-3" /> {event.crowd.toLocaleString()}
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            {event.status !== "deployed" && event.status !== "live" && (
+              <button
+                onClick={() => updateEvent(event.id, { status: "deployed" })}
+                className="inline-flex items-center gap-2 rounded-md bg-primary text-primary-foreground px-3 py-2 text-sm font-medium hover:bg-primary/90"
+              >
+                <ShieldCheck className="size-4" /> Approve Deployment
+              </button>
+            )}
+            {event.status === "deployed" && (
+              <button
+                onClick={() => updateEvent(event.id, { status: "live" })}
+                className="inline-flex items-center gap-2 rounded-md bg-critical text-destructive-foreground px-3 py-2 text-sm font-medium hover:opacity-90"
+              >
+                <Play className="size-4" /> Go Live
+              </button>
+            )}
+            {event.status === "live" && (
+              <button
+                onClick={() => updateEvent(event.id, { status: "closed" })}
+                className="inline-flex items-center gap-2 rounded-md border border-border bg-card/60 px-3 py-2 text-sm hover:bg-accent/40"
+              >
+                <CheckCircle2 className="size-4" /> Close Event
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* Twin + simulator */}
+        <Panel title="Digital Twin" subtitle="Impact radius + similar past incidents" className="col-span-12 lg:col-span-8 h-[480px] flex flex-col">
+          <div className="flex-1 p-2">
+            <CityMap events={[event]} focus={{ lat: event.lat, lng: event.lng, impactRadiusKm: prediction.impactRadiusKm, riskScore: prediction.riskScore }} />
+          </div>
+        </Panel>
+
+        <Panel title="Impact Simulator" className="col-span-12 lg:col-span-4">
+          <div className="p-4 grid place-items-center">
+            <RiskGauge score={prediction.riskScore} />
+          </div>
+          <div className="grid grid-cols-2 gap-2 p-4 pt-0">
+            <MetricStat label="Radius" value={`${prediction.impactRadiusKm} km`} tone="info" />
+            <MetricStat label="Delay" value={`${prediction.delayMinutes} min`} tone="warning" />
+            <MetricStat label="Confidence" value={`${prediction.confidence}%`} tone="success" />
+            <MetricStat label="Similar past" value={prediction.similarIncidents.length} sub="incidents" />
+          </div>
+        </Panel>
+
+        {/* Resource & diversion */}
+        <Panel title="Resource Optimization" subtitle="Recommended deployment" className="col-span-12 lg:col-span-4">
+          <div className="p-4 space-y-3">
+            <ResourceRow label="Traffic officers" need={prediction.recommendedOfficers} icon={Users} />
+            <ResourceRow label="Barricades" need={prediction.recommendedBarricades} icon={ShieldCheck} />
+            <ResourceRow label="Patrol units" need={Math.max(2, Math.round(prediction.recommendedOfficers / 4))} icon={Radio} />
+            <div className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground pt-2">Lead stations</div>
+            <div className="flex flex-wrap gap-1.5">
+              {prediction.affectedStations.map((s) => (
+                <span key={s} className="text-[12px] px-2 py-1 rounded-md bg-accent/50 border border-border">{s}</span>
+              ))}
+            </div>
+          </div>
+        </Panel>
+
+        <Panel title="Smart Diversion Planner" subtitle="Traffic-aware alternates" className="col-span-12 lg:col-span-4">
+          <div className="divide-y divide-border">
+            {prediction.diversions.length ? prediction.diversions.map((d, i) => (
+              <div key={i} className="p-3 flex items-center gap-3">
+                <RouteIcon className="size-4 text-primary shrink-0" />
+                <div className="text-sm flex-1 min-w-0">
+                  <div className="truncate">{d.from} → <span className="text-foreground/70">via {d.via}</span> → {d.to}</div>
+                  <div className="text-[11px] font-mono text-muted-foreground">+ {(3 + i * 2)} min · capacity 78%</div>
+                </div>
+              </div>
+            )) : <div className="p-4 text-sm text-muted-foreground">No corridor-level diversions required.</div>}
+          </div>
+        </Panel>
+
+        <Panel title="Explainable Intelligence" subtitle="Why NETHRA recommends this" className="col-span-12 lg:col-span-4">
+          <div className="p-4 space-y-3 text-sm">
+            <ul className="space-y-1.5 text-[13px]">
+              {prediction.reasoning.map((r, i) => (
+                <li key={i} className="flex gap-2"><span className="text-primary mt-0.5">›</span><span className="text-foreground/80">{r}</span></li>
+              ))}
+            </ul>
+            <Link to="/strategist" className="inline-flex items-center gap-2 text-primary text-sm hover:underline mt-2">
+              <Bot className="size-4" /> Ask the AI Strategist about this event
+            </Link>
+          </div>
+        </Panel>
+
+        {/* Similar incidents */}
+        <Panel title="Similar Past Incidents" subtitle="From historical intelligence" className="col-span-12" action={<History className="size-4 text-muted-foreground" />}>
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-2 p-3">
+            {prediction.similarIncidents.map((s) => (
+              <div key={s.id} className="rounded-md border border-border bg-card/50 p-3 text-sm">
+                <div className="flex items-center justify-between">
+                  <span className="font-mono text-[11px] text-muted-foreground">{s.id}</span>
+                  <Badge tone={s.priority === "High" ? "critical" : "muted"}>{s.priority}</Badge>
+                </div>
+                <div className="text-[13px] mt-1 capitalize">{s.cause.replace(/_/g, " ")}</div>
+                <div className="text-[11px] text-muted-foreground mt-0.5">{s.corridor} · {s.station || s.zone || "Bengaluru"}</div>
+              </div>
+            ))}
+          </div>
+        </Panel>
+      </div>
+    </AppShell>
+  );
+}
+
+function ResourceRow({ label, need, icon: Icon }: { label: string; need: number; icon: typeof Users }) {
+  const have = Math.round(need * 0.7);
+  const pct = Math.min(100, Math.round((have / need) * 100));
+  return (
+    <div>
+      <div className="flex items-center justify-between text-sm mb-1">
+        <span className="inline-flex items-center gap-2"><Icon className="size-3.5 text-muted-foreground" />{label}</span>
+        <span className="font-mono text-xs text-muted-foreground">{have} / {need}</span>
+      </div>
+      <div className="h-1.5 rounded-full bg-muted overflow-hidden">
+        <div className="h-full bg-primary" style={{ width: `${pct}%` }} />
+      </div>
+    </div>
+  );
+}
