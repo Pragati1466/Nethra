@@ -4,6 +4,7 @@ import { AppShell, Panel, Badge } from "@/components/nethra/AppShell";
 import { Skeleton } from "@/components/ui/skeleton";
 import { EVENT_KINDS, getEvents, INCIDENTS, nearbyIncidents, predictImpact, riskBand } from "@/lib/intel";
 import { Bot, Send, Sparkles, User } from "lucide-react";
+import { toast } from "sonner";
 
 export const Route = createFileRoute("/strategist")({
   head: () => ({ meta: [{ title: "AI Strategist · NETHRA" }, { name: "description", content: "Ask the NETHRA AI Strategist about risks, deployments and operational decisions." }] }),
@@ -83,6 +84,9 @@ function StrategistPage() {
     setMsgs((m) => [...m, { role: "user", text: q }]);
     setInput("");
     setTimeout(() => setMsgs((m) => [...m, answer(q)]), 350);
+    toast.success("Message sent", {
+      description: "AI Strategist is analyzing your query.",
+    });
   }
 
   return (

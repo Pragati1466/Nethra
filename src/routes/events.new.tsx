@@ -5,6 +5,7 @@ import { CityMap } from "@/components/nethra/CityMap";
 import { RiskGauge, MetricStat } from "@/components/nethra/RiskGauge";
 import { EVENT_KINDS, type EventKindId, addEvent, predictImpact, riskBand } from "@/lib/intel";
 import { CheckCircle2, MapPin, Sparkles, Users } from "lucide-react";
+import { toast } from "sonner";
 
 export const Route = createFileRoute("/events/new")({
   head: () => ({
@@ -44,6 +45,9 @@ function NewEvent() {
       id, name, kind, lat: pin.lat, lng: pin.lng, address,
       crowd, durationHours: hours, startsAt: new Date(startsAt).toISOString(),
       status: "planned", createdAt: new Date().toISOString(),
+    });
+    toast.success("Event created successfully", {
+      description: `${name} has been staged and operational plan is ready.`,
     });
     navigate({ to: "/events/$eventId", params: { eventId: id } });
   }
