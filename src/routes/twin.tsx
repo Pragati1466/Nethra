@@ -5,10 +5,11 @@ import { TwinMap, type LayerToggles } from "@/components/nethra/TwinMap";
 import { TimeScrubber } from "@/components/nethra/TimeScrubber";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ShareButton } from "@/components/ui/share-button";
+import { Input } from "@/components/ui/input";
 import { getEvents, subscribe, INCIDENTS, predictImpact, riskBand } from "@/lib/intel";
 import { cellIntensity, formatHourOfWeek } from "@/lib/timefield";
 import { HEX_CELLS } from "@/data/hexgrid";
-import { Activity, Layers, Map as MapIcon, Flame, Building2, Radio, AlertTriangle } from "lucide-react";
+import { Activity, Layers, Map as MapIcon, Flame, Building2, Radio, AlertTriangle, Search } from "lucide-react";
 
 export const Route = createFileRoute("/twin")({
   head: () => ({
@@ -32,11 +33,34 @@ const NORMALIZER = (MAX_TOTAL / 168) * 2.0 * 10 * 0.55;
 function TwinPage() {
   const [events, setEvents] = useState(getEvents());
   const [isLoading, setIsLoading] = useState(true);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [debouncedSearchQuery, setDebouncedSearchQuery] = useState("");
+  
   useEffect(() => {
     subscribe(() => setEvents([...getEvents()]));
     // Simulate loading state
     setTimeout(() => setIsLoading(false), 500);
   }, []);
+
+  // Debounced search for performance
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearchQuery(searchQuery);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
+
+  // Filter events based on search query (case-insensitive)
+  const filteredEvents = useMemo(() => {
+    if (!debouncedSearchQuery) return events;
+    const query = debouncedSearchQuery.toLowerCase();
+    return events.filter(
+      (e) =>
+        e.name.toLowerCase().includes(query) ||
+        e.address.toLowerCase().includes(query) ||
+        e.kind.toLowerCase().includes(query)
+    );
+  }, [events, debouncedSearchQuery]);
 
   // Seed clock: Friday 18:00 UTC ≈ Fri 23:30 IST — peak Bengaluru chaos hour for first impression.
   const [hourOfWeek, setHourOfWeek] = useState(5 * 24 + 13);
@@ -103,7 +127,7 @@ function TwinPage() {
         ) : (
           <>
             <div className="flex items-end justify-between gap-3 flex-wrap">
-              <div>
+              <div className="flex-1 min-w-0">
                 <div className="text-[11px] font-mono uppercase tracking-[0.2em] text-primary">Digital Twin</div>
                 <h1 className="text-2xl font-semibold mt-1">Bengaluru · Operational Reality Layer</h1>
                 <p className="text-sm text-muted-foreground mt-1 max-w-2xl">
@@ -112,6 +136,16 @@ function TwinPage() {
                 </p>
               </div>
               <div className="flex items-center gap-2">
+                <div className="relative">
+                  <Search className="absolute left-2.5 top-2.5 size-4 text-muted-foreground" />
+                  <Input
+                    type="text"
+                    placeholder="Search events..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="pl-9 w-48 md:w-64"
+                  />
+                </div>
                 <ShareButton />
                 <Badge tone={cityStats.congestionTier === "SEVERE" ? "critical" : cityStats.congestionTier === "HIGH" ? "warning" : cityStats.congestionTier === "MODERATE" ? "info" : "success"}>
                   {cityStats.congestionTier}
@@ -183,30 +217,36 @@ function TwinPage() {
               </div>
             </Panel>
 
-            <Panel title="Live Events" subtitle="Click on map or list">
+            <Panel title="Live Events" subtitle={`Click on map or list ${filteredEvents.length !== events.length ? `(${filteredEvents.length} filtered)` : ""}`}>
               <div className="divide-y divide-border max-h-72 overflow-auto">
-                {events.map((e) => {
-                  const p = predictImpact({ kind: e.kind, lat: e.lat, lng: e.lng, crowd: e.crowd, durationHours: e.durationHours });
-                  const band = riskBand(p.riskScore);
-                  return (
-                    <button
-                      key={e.id}
-                      onClick={() => setFocusId(e.id)}
-                      className={`w-full text-left px-3 py-2.5 hover:bg-accent/40 transition ${focusId === e.id ? "bg-accent/30" : ""}`}
-                    >
-                      <div className="flex items-start gap-2">
-                        <div className="mt-1 size-2 rounded-full" style={{ background: band.color }} />
-                        <div className="flex-1 min-w-0">
-                          <div className="text-sm font-medium truncate">{e.name}</div>
-                          <div className="text-[11px] font-mono text-muted-foreground truncate">{e.address}</div>
-                          <div className="text-[10px] font-mono mt-0.5" style={{ color: band.color }}>
-                            risk {p.riskScore} · {p.delayMinutes}min
+                {filteredEvents.length === 0 ? (
+                  <div className="p-4 text-center text-sm text-muted-foreground">
+                    No events match "{debouncedSearchQuery}"
+                  </div>
+                ) : (
+                  filteredEvents.map((e) => {
+                    const p = predictImpact({ kind: e.kind, lat: e.lat, lng: e.lng, crowd: e.crowd, durationHours: e.durationHours });
+                    const band = riskBand(p.riskScore);
+                    return (
+                      <button
+                        key={e.id}
+                        onClick={() => setFocusId(e.id)}
+                        className={`w-full text-left px-3 py-2.5 hover:bg-accent/40 transition ${focusId === e.id ? "bg-accent/30" : ""}`}
+                      >
+                        <div className="flex items-start gap-2">
+                          <div className="mt-1 size-2 rounded-full" style={{ background: band.color }} />
+                          <div className="flex-1 min-w-0">
+                            <div className="text-sm font-medium truncate">{e.name}</div>
+                            <div className="text-[11px] font-mono text-muted-foreground truncate">{e.address}</div>
+                            <div className="text-[10px] font-mono mt-0.5" style={{ color: band.color }}>
+                              risk {p.riskScore} · {p.delayMinutes}min
+                            </div>
                           </div>
                         </div>
-                      </div>
-                    </button>
-                  );
-                })}
+                      </button>
+                    );
+                  })
+                )}
               </div>
             </Panel>
 

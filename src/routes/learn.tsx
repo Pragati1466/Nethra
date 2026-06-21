@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { AppShell, Panel, Badge } from "@/components/nethra/AppShell";
 import { MetricStat } from "@/components/nethra/RiskGauge";
+import { Input } from "@/components/ui/input";
 import {
   learnRecords,
   predVsActualSeries,
@@ -9,11 +10,12 @@ import {
   historicalLedger,
   learningSummary,
 } from "@/lib/intel";
-import { Brain, TrendingDown, TrendingUp, GitBranch, Activity, Target, Workflow } from "lucide-react";
+import { Brain, TrendingDown, TrendingUp, GitBranch, Activity, Target, Workflow, Search } from "lucide-react";
 import {
   ScatterChart, Scatter, XAxis, YAxis, ZAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, Line, LineChart, ReferenceLine, Area, AreaChart, Legend,
 } from "recharts";
+import { useEffect, useMemo, useState } from "react";
 
 export const Route = createFileRoute("/learn")({
   head: () => ({
@@ -37,6 +39,40 @@ function LearnPage() {
   const calib = calibrationBins();
   const ledger = historicalLedger(14);
   const records = learnRecords();
+  const [searchQuery, setSearchQuery] = useState("");
+  const [debouncedSearchQuery, setDebouncedSearchQuery] = useState("");
+
+  // Debounced search for performance
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearchQuery(searchQuery);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
+
+  // Filter ledger based on search query (case-insensitive)
+  const filteredLedger = useMemo(() => {
+    if (!debouncedSearchQuery) return ledger;
+    const query = debouncedSearchQuery.toLowerCase();
+    return ledger.filter(
+      (r) =>
+        r.id.toLowerCase().includes(query) ||
+        r.event.toLowerCase().includes(query) ||
+        r.status.toLowerCase().includes(query)
+    );
+  }, [ledger, debouncedSearchQuery]);
+
+  // Filter records based on search query (case-insensitive)
+  const filteredRecords = useMemo(() => {
+    if (!debouncedSearchQuery) return records;
+    const query = debouncedSearchQuery.toLowerCase();
+    return records.filter(
+      (r) =>
+        r.id.toLowerCase().includes(query) ||
+        r.name.toLowerCase().includes(query) ||
+        r.notes.toLowerCase().includes(query)
+    );
+  }, [records, debouncedSearchQuery]);
 
   // Scatter domain & ideal y=x reference points
   const maxDelay = Math.max(...scatter.map((s) => Math.max(s.predictedDelayMin, s.actualDelayMin))) + 5;
@@ -47,18 +83,30 @@ function LearnPage() {
       <div className="p-4 lg:p-6 grid grid-cols-12 gap-4">
         {/* Header */}
         <div className="col-span-12 flex flex-col lg:flex-row lg:items-end lg:justify-between gap-3">
-          <div>
+          <div className="flex-1 min-w-0">
             <div className="text-[11px] font-mono uppercase tracking-[0.2em] text-primary">Learning Dashboard</div>
             <h1 className="text-2xl font-semibold mt-1">NETHRA sharpens with every closed event</h1>
             <p className="text-sm text-muted-foreground mt-1">
               Predicted vs actual delay, forecast accuracy, calibration drift, and the learning trend across the last 12 weeks.
             </p>
           </div>
-          <div className="flex items-center gap-2 font-mono text-[11px] text-muted-foreground">
-            <GitBranch className="size-3.5 text-primary" />
-            <span>{summary.modelVersion}</span>
-            <span className="text-border">·</span>
-            <span>{summary.eventsLearned} events trained</span>
+          <div className="flex items-center gap-2">
+            <div className="relative">
+              <Search className="absolute left-2.5 top-2.5 size-4 text-muted-foreground" />
+              <Input
+                type="text"
+                placeholder="Search records..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="pl-9 w-48 md:w-64"
+              />
+            </div>
+            <div className="flex items-center gap-2 font-mono text-[11px] text-muted-foreground">
+              <GitBranch className="size-3.5 text-primary" />
+              <span>{summary.modelVersion}</span>
+              <span className="text-border">·</span>
+              <span>{summary.eventsLearned} events trained</span>
+            </div>
           </div>
         </div>
 
@@ -190,72 +238,84 @@ function LearnPage() {
         </Panel>
 
         {/* Historical performance ledger */}
-        <Panel title="Historical Performance" subtitle="Latest closed events — predicted vs actual delay." className="col-span-12">
+        <Panel title="Historical Performance" subtitle={`Latest closed events — predicted vs actual delay${filteredLedger.length !== ledger.length ? ` (${filteredLedger.length} filtered)` : ""}`} className="col-span-12">
           <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="text-left text-[10px] font-mono uppercase tracking-wider text-muted-foreground border-b border-border">
-                  <th className="px-4 py-2">ID</th>
-                  <th className="px-4 py-2">When</th>
-                  <th className="px-4 py-2">Event</th>
-                  <th className="px-4 py-2 text-right">Predicted</th>
-                  <th className="px-4 py-2 text-right">Actual</th>
-                  <th className="px-4 py-2 text-right">Δ</th>
-                  <th className="px-4 py-2">Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                {ledger.map((r) => (
-                  <tr key={r.id} className="border-b border-border/60 hover:bg-accent/20">
-                    <td className="px-4 py-2 font-mono text-[11px] text-muted-foreground">{r.id}</td>
-                    <td className="px-4 py-2 font-mono text-[11px]">{r.date}</td>
-                    <td className="px-4 py-2 capitalize">{r.event}</td>
-                    <td className="px-4 py-2 text-right font-mono">{r.predicted}m</td>
-                    <td className="px-4 py-2 text-right font-mono">{r.actual}m</td>
-                    <td className="px-4 py-2 text-right font-mono">
-                      <span className="inline-flex items-center gap-0.5" style={{ color: r.delta >= 0 ? "var(--critical)" : "var(--success)" }}>
-                        {r.delta >= 0 ? <TrendingUp className="size-3" /> : <TrendingDown className="size-3" />}
-                        {r.delta > 0 ? "+" : ""}{r.delta}m
-                      </span>
-                    </td>
-                    <td className="px-4 py-2">
-                      <Badge tone={r.status === "on-target" ? "success" : r.status === "improved" ? "info" : "warning"}>
-                        {r.status}
-                      </Badge>
-                    </td>
+            {filteredLedger.length === 0 ? (
+              <div className="p-8 text-center text-sm text-muted-foreground">
+                No records match "{debouncedSearchQuery}"
+              </div>
+            ) : (
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="text-left text-[10px] font-mono uppercase tracking-wider text-muted-foreground border-b border-border">
+                    <th className="px-4 py-2">ID</th>
+                    <th className="px-4 py-2">When</th>
+                    <th className="px-4 py-2">Event</th>
+                    <th className="px-4 py-2 text-right">Predicted</th>
+                    <th className="px-4 py-2 text-right">Actual</th>
+                    <th className="px-4 py-2 text-right">Δ</th>
+                    <th className="px-4 py-2">Status</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {filteredLedger.map((r) => (
+                    <tr key={r.id} className="border-b border-border/60 hover:bg-accent/20">
+                      <td className="px-4 py-2 font-mono text-[11px] text-muted-foreground">{r.id}</td>
+                      <td className="px-4 py-2 font-mono text-[11px]">{r.date}</td>
+                      <td className="px-4 py-2 capitalize">{r.event}</td>
+                      <td className="px-4 py-2 text-right font-mono">{r.predicted}m</td>
+                      <td className="px-4 py-2 text-right font-mono">{r.actual}m</td>
+                      <td className="px-4 py-2 text-right font-mono">
+                        <span className="inline-flex items-center gap-0.5" style={{ color: r.delta >= 0 ? "var(--critical)" : "var(--success)" }}>
+                          {r.delta >= 0 ? <TrendingUp className="size-3" /> : <TrendingDown className="size-3" />}
+                          {r.delta > 0 ? "+" : ""}{r.delta}m
+                        </span>
+                      </td>
+                      <td className="px-4 py-2">
+                        <Badge tone={r.status === "on-target" ? "success" : r.status === "improved" ? "info" : "warning"}>
+                          {r.status}
+                        </Badge>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
           </div>
         </Panel>
 
         {/* Per-event drill-down (kept from prior view) */}
-        <Panel title="Per-Event Learning Notes" className="col-span-12">
+        <Panel title="Per-Event Learning Notes" subtitle={filteredRecords.length !== records.length ? `(${filteredRecords.length} filtered)` : ""} className="col-span-12">
           <div className="divide-y divide-border">
-            {records.map((r) => {
-              const delta = r.actualRisk - r.predictedRisk;
-              const accurate = Math.abs(delta) <= 8;
-              return (
-                <div key={r.id} className="p-4 grid grid-cols-12 gap-4 items-center">
-                  <div className="col-span-12 lg:col-span-5">
-                    <div className="font-mono text-[11px] text-muted-foreground">{r.id}</div>
-                    <div className="text-sm font-medium mt-0.5 capitalize">{r.name}</div>
-                    <div className="text-[12px] text-muted-foreground mt-1 flex items-center gap-1.5">
-                      <Brain className="size-3 text-primary" /> {r.notes}
+            {filteredRecords.length === 0 ? (
+              <div className="p-8 text-center text-sm text-muted-foreground">
+                No records match "{debouncedSearchQuery}"
+              </div>
+            ) : (
+              filteredRecords.map((r) => {
+                const delta = r.actualRisk - r.predictedRisk;
+                const accurate = Math.abs(delta) <= 8;
+                return (
+                  <div key={r.id} className="p-4 grid grid-cols-12 gap-4 items-center">
+                    <div className="col-span-12 lg:col-span-5">
+                      <div className="font-mono text-[11px] text-muted-foreground">{r.id}</div>
+                      <div className="text-sm font-medium mt-0.5 capitalize">{r.name}</div>
+                      <div className="text-[12px] text-muted-foreground mt-1 flex items-center gap-1.5">
+                        <Brain className="size-3 text-primary" /> {r.notes}
+                      </div>
+                    </div>
+                    <KpiBar label="Risk" pred={r.predictedRisk} act={r.actualRisk} unit="" />
+                    <KpiBar label="Delay" pred={r.predictedDelayMin} act={r.actualDelayMin} unit="m" />
+                    <div className="col-span-12 lg:col-span-2 flex lg:justify-end items-center gap-2">
+                      <Badge tone={accurate ? "success" : "warning"}>{accurate ? "on target" : "re-tuned"}</Badge>
+                      <span className="font-mono text-xs inline-flex items-center gap-0.5" style={{ color: delta >= 0 ? "var(--critical)" : "var(--success)" }}>
+                        {delta >= 0 ? <TrendingUp className="size-3" /> : <TrendingDown className="size-3" />} Δ {delta > 0 ? "+" : ""}{delta}
+                      </span>
                     </div>
                   </div>
-                  <KpiBar label="Risk" pred={r.predictedRisk} act={r.actualRisk} unit="" />
-                  <KpiBar label="Delay" pred={r.predictedDelayMin} act={r.actualDelayMin} unit="m" />
-                  <div className="col-span-12 lg:col-span-2 flex lg:justify-end items-center gap-2">
-                    <Badge tone={accurate ? "success" : "warning"}>{accurate ? "on target" : "re-tuned"}</Badge>
-                    <span className="font-mono text-xs inline-flex items-center gap-0.5" style={{ color: delta >= 0 ? "var(--critical)" : "var(--success)" }}>
-                      {delta >= 0 ? <TrendingUp className="size-3" /> : <TrendingDown className="size-3" />} Δ {delta > 0 ? "+" : ""}{delta}
-                    </span>
-                  </div>
-                </div>
-              );
-            })}
+                );
+              })
+            )}
           </div>
         </Panel>
       </div>
