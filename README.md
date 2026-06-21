@@ -19,12 +19,12 @@
 NETHRA is an operational decision-making platform for traffic police, planners, and emergency response in Bengaluru. It transforms raw incident data into actionable intelligence through predictive modeling, spatial analysis, and real-time simulation.
 
 **Key Capabilities:**
-- 🎯 **Predictive Risk Modeling** – Score events (0-100) based on 8,173+ historical incidents
-- 🗺️ **Digital Twin** – 168-hour traffic replay with H3 hex grid spatial analysis
-- 🚨 **Impact Assessment** – Calculate citizen impact, economic loss, and emergency access risk
-- 🚦 **Smart Diversion Planning** – Traffic-aware alternate route generation
-- ⚡ **Live Operations Pulse** – Real-time simulation of units, corridors, and alerts
-- 🤖 **AI Strategist** – Chat-based assistant for scenario analysis
+🎯 **Predictive Risk Modeling** – Score events (0-100) based on 8,173+ historical incidents
+🗺️ **Digital Twin** – 168-hour traffic replay with H3 hex grid spatial analysis
+🚨 **Impact Assessment** – Calculate citizen impact, economic loss, and emergency access risk
+🚦 **Smart Diversion Planning** – Traffic-aware alternate route generation
+⚡ **Live Operations Pulse** – Real-time simulation of units, corridors, and alerts
+🤖 **AI Strategist** – Chat-based assistant for scenario analysis
 
 ---
 
