@@ -35,7 +35,8 @@ export function AppShell({ children }: { children: ReactNode }) {
             </div>
             <div>
               <div className="font-semibold tracking-wide text-sm leading-none">👁 NETHRA</div>
-              <div className="text-[10px] text-muted-foreground font-mono mt-1">TRAFFIC OS · v1.0</div>
+              <div className="text-[10px] text-muted-foreground font-mono mt-1">Eyes on the city</div>
+              <div className="text-[9px] text-muted-foreground/70 font-mono">TRAFFIC OS · v1.0</div>
             </div>
           </Link>
         </div>
