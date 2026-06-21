@@ -34,7 +34,7 @@ export function AppShell({ children }: { children: ReactNode }) {
               <span className="absolute -right-0.5 -top-0.5 size-2 rounded-full bg-success pulse-dot relative" />
             </div>
             <div>
-              <div className="font-semibold tracking-wide text-sm leading-none">NETHRA</div>
+              <div className="font-semibold tracking-wide text-sm leading-none">👁 NETHRA</div>
               <div className="text-[10px] text-muted-foreground font-mono mt-1">TRAFFIC OS · v1.0</div>
             </div>
           </Link>
