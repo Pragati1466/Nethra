@@ -83,7 +83,7 @@ function CommandCenter() {
 
         <Panel
           title="Operations Queue"
-          subtitle="Risk-ranked"
+          subtitle={`Risk-ranked · ${events.length} events`}
           className="col-span-12 lg:col-span-4 h-[560px] flex flex-col"
         >
           <div className="flex-1 overflow-auto divide-y divide-border">
