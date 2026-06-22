@@ -115,12 +115,33 @@ function CommandCenter() {
                             <span className="font-mono text-xs" style={{ color: band.color }}>{p.riskScore}</span>
                           </div>
                           <div className="text-xs text-muted-foreground truncate">{e.address}</div>
-                          <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
-                            <Badge tone={e.status === "live" ? "critical" : e.status === "planned" ? "warning" : "muted"}>{e.status}</Badge>
-                            <span className="text-[11px] font-mono text-muted-foreground">
-                              <Users className="inline size-3 mr-0.5" />{e.crowd.toLocaleString()}
+                          <div className="mt-1.5 flex items-center gap-1.5">
+                            <Badge
+                              tone={
+                                e.status === "live"
+                                  ? "critical"
+                                  : e.status === "planned"
+                                     ? "warning"
+                                  : "muted"
+                              }
+                            >
+                              {e.status}
+                            </Badge>
+
+                            {e.crowd > 0 ? (
+                              <span className="text-[11px] font-mono text-muted-foreground">
+                                <Users className="inline size-3 mr-0.5" />
+                                {e.crowd.toLocaleString()}
+                              </span>
+                            ) : (
+                              <span className="text-[11px] font-mono text-muted-foreground whitespace-nowrap">
+                                {e.notes}
+                              </span>
+                            )}
+
+                            <span className="text-[11px] font-mono text-muted-foreground whitespace-nowrap">
+                              · {p.delayMinutes} min delay
                             </span>
-                            <span className="text-[11px] font-mono text-muted-foreground">· {p.delayMinutes}min delay</span>
                           </div>
                         </div>
                         <ArrowRight className="size-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition" />

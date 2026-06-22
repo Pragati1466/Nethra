@@ -46,8 +46,9 @@ export const EVENT_KINDS = [
   { id: "rally", label: "Political Rally / Protest", crowdMult: 1.5, baseRisk: 78 },
   { id: "vip", label: "VIP Movement", crowdMult: 0.6, baseRisk: 65 },
   { id: "construction", label: "Construction / Roadwork", crowdMult: 0.2, baseRisk: 40 },
-  { id: "accident", label: "Major Accident", crowdMult: 0.3, baseRisk: 70 },
+  { id: "accident", label: "Major Accident", crowdMult: 0.3, baseRisk: 51 },
   { id: "gathering", label: "Public Gathering", crowdMult: 1.0, baseRisk: 55 },
+  { id: "waterlogging", label: "Waterlogging", crowdMult: 0, baseRisk: 42},
 ] as const;
 export type EventKindId = typeof EVENT_KINDS[number]["id"];
 
@@ -200,7 +201,24 @@ function seedEvents(): PlannedEvent[] {
       kind: "construction",
       lat: 12.9352, lng: 77.6245, address: "Outer Ring Road, Bellandur",
       crowd: 0, startsAt: new Date(now - 3 * 3600e3).toISOString(),
-      durationHours: 72, status: "live", createdAt: new Date(now - 4 * 3600e3).toISOString(),
+      durationHours: 72, notes: "Roadwork in progress", status: "live", createdAt: new Date(now - 4 * 3600e3).toISOString(),
+    },
+    {
+      id: "EVT-2042",
+      name: "Silk Board Flyover Accident",
+      kind: "accident",
+      lat: 12.9177, lng: 77.6238, address: "Silk Board Junction",
+      crowd: 0,startsAt: new Date(now - 45 * 60e3).toISOString(),
+      durationHours: 3, notes: "2 lanes blocked", status: "live", createdAt: new Date(now - 45 * 60e3).toISOString(),
+    },
+    {
+      id: "EVT-2043",
+      name: "KR Puram Waterlogging",
+      kind: "waterlogging",
+      lat: 13.0073, lng: 77.6962, address: "KR Puram Junction",
+      crowd: 0,
+      startsAt: new Date(now - 2 * 3600e3).toISOString(),
+      durationHours: 5, notes: "Severe waterlogging", status: "live", createdAt: new Date(now - 2 * 3600e3).toISOString(),
     },
   ];
 }
