@@ -9,9 +9,12 @@ import { ExplainabilityPanel } from "@/components/nethra/Explainability";
 import { ImpactPanel } from "@/components/nethra/ImpactPanel";
 import { assessImpact } from "@/lib/impact";
 import { ArrowLeft, Bot, CheckCircle2, Play, Radio, Route as RouteIcon, ShieldCheck, Users } from "lucide-react";
+<<<<<<< HEAD
 import { getTiwForEvent } from "@/lib/tiw_store";
 import { deriveCeifromTiwClosure, setLatestClosedIntel } from "@/lib/closed_intel_store";
 
+=======
+>>>>>>> a259a7533f4e8fc6a82be8ae72f51efaf13fee5b
 
 export const Route = createFileRoute("/events/$eventId")({
   component: EventPage,
@@ -63,15 +66,22 @@ function EventPage() {
               <Badge tone={event.status === "live" ? "critical" : event.status === "deployed" ? "info" : event.status === "planned" ? "warning" : "muted"}>
                 {event.status}
               </Badge>
+<<<<<<< HEAD
               <Badge tone={band.tone}>Event Impact Score (EIS) {prediction.riskScore}</Badge>
+=======
+              <Badge tone={band.tone}>Risk {prediction.riskScore}</Badge>
+>>>>>>> a259a7533f4e8fc6a82be8ae72f51efaf13fee5b
             </div>
             <p className="text-sm text-muted-foreground mt-1">{kindLabel} · {event.address}</p>
             <p className="text-xs font-mono text-muted-foreground mt-0.5">
               Starts {new Date(event.startsAt).toLocaleString()} · {event.durationHours}h · <Users className="inline size-3" /> {event.crowd.toLocaleString()}
             </p>
+<<<<<<< HEAD
             <Badge tone={event.status === "planned" || event.status === "draft" ? "warning" : "info"}>
               {new Date(event.createdAt).getTime() <= new Date(event.startsAt).getTime() - 2 * 3600e3 ? "Forecast Mode (Planned Event)" : "Rapid Response Mode (Unplanned Event)"}
             </Badge>
+=======
+>>>>>>> a259a7533f4e8fc6a82be8ae72f51efaf13fee5b
           </div>
           <div className="flex items-center gap-2">
             {event.status !== "deployed" && event.status !== "live" && (
@@ -82,7 +92,10 @@ function EventPage() {
                 <ShieldCheck className="size-4" /> Approve Deployment
               </button>
             )}
+<<<<<<< HEAD
 
+=======
+>>>>>>> a259a7533f4e8fc6a82be8ae72f51efaf13fee5b
             {event.status === "deployed" && (
               <button
                 onClick={() => updateEvent(event.id, { status: "live" })}
@@ -93,6 +106,7 @@ function EventPage() {
             )}
             {event.status === "live" && (
               <button
+<<<<<<< HEAD
                 onClick={() => {
                   // Demo-driven: on close, write the shared CEI record once.
                   if (prediction && (prediction as any) && prediction.riskScore !== undefined) {
@@ -116,12 +130,18 @@ function EventPage() {
                   }
                   updateEvent(event.id, { status: "closed" });
                 }}
+=======
+                onClick={() => updateEvent(event.id, { status: "closed" })}
+>>>>>>> a259a7533f4e8fc6a82be8ae72f51efaf13fee5b
                 className="inline-flex items-center gap-2 rounded-md border border-border bg-card/60 px-3 py-2 text-sm hover:bg-accent/40"
               >
                 <CheckCircle2 className="size-4" /> Close Event
               </button>
             )}
+<<<<<<< HEAD
 
+=======
+>>>>>>> a259a7533f4e8fc6a82be8ae72f51efaf13fee5b
           </div>
         </div>
 
