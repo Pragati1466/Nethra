@@ -1,5 +1,6 @@
-import { useMemo, useRef, useState, useEffect } from "react";
+import { useMemo, useRef, useState, useEffect, useCallback } from "react";
 import { INCIDENTS, type PlannedEvent, riskBand } from "@/lib/intel";
+import { Maximize2, Minimize2 } from "lucide-react";
 
 // Bengaluru bounding box (slightly padded). All projections are linear within it.
 const BBOX = { minLat: 12.82, maxLat: 13.18, minLng: 77.45, maxLng: 77.78 };
@@ -57,6 +58,7 @@ export function CityMap({ height = "100%", events = [], focus, onPick, showHeat 
   const svgRef = useRef<SVGSVGElement | null>(null);
   const [hoverPin, setHoverPin] = useState<PlannedEvent | null>(null);
   const [tick, setTick] = useState(0);
+  const [isFullscreen, setIsFullscreen] = useState(false);
   useEffect(() => {
     const h = setInterval(() => setTick((t) => t + 1), 2200);
     return () => clearInterval(h);
@@ -90,10 +92,27 @@ export function CityMap({ height = "100%", events = [], focus, onPick, showHeat 
     onPick(lat, lng);
   }
 
+  const toggleFullscreen = () => {
+    setIsFullscreen(!isFullscreen);
+  };
+
   return (
-    <div className={className} style={{ height, width: "100%", position: "relative", borderRadius: 8, overflow: "hidden",
+    <div className={className} style={{
+      height, width: "100%", position: "relative", borderRadius: 8, overflow: "hidden",
       background: "radial-gradient(ellipse at center, oklch(0.20 0.03 230), oklch(0.14 0.02 250) 70%)",
-      border: "1px solid var(--border)" }}>
+      border: "1px solid var(--border)",
+      ...(isFullscreen ? {
+        position: "fixed",
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        borderRadius: 0,
+        zIndex: 9999,
+        height: "100vh",
+        width: "100vw"
+      } : {})
+    }}>
       <svg
         ref={svgRef}
         viewBox={`0 0 ${VIEW_W} ${VIEW_H}`}
@@ -176,7 +195,7 @@ export function CityMap({ height = "100%", events = [], focus, onPick, showHeat 
           const band = riskBand(e.status === "live" ? 85 : 60);
           return (
             <g key={e.id} transform={`translate(${p.x},${p.y})`} style={{ cursor: "pointer" }}
-               onMouseEnter={() => setHoverPin(e)} onMouseLeave={() => setHoverPin(null)}>
+              onMouseEnter={() => setHoverPin(e)} onMouseLeave={() => setHoverPin(null)}>
               <circle r="14" fill={band.color} opacity="0.18" filter="url(#glow)" />
               <circle r="10" fill={band.color} stroke="#0a0a14" strokeWidth="2" />
               <text textAnchor="middle" y="4" fontSize="11" fontWeight="700" fill="#0a0a14" fontFamily="ui-sans-serif">
@@ -194,7 +213,7 @@ export function CityMap({ height = "100%", events = [], focus, onPick, showHeat 
           const p = project(u.lat, u.lng);
           const color = u.tone === "success" ? "var(--success)"
             : u.tone === "warning" ? "var(--warning)"
-            : u.tone === "muted" ? "var(--muted-foreground)" : "var(--info)";
+              : u.tone === "muted" ? "var(--muted-foreground)" : "var(--info)";
           return (
             <g key={u.id} transform={`translate(${p.x},${p.y})`} style={{ transition: "transform 1s linear" }}>
               <circle r={4 + (tick % 4)} fill={color} opacity={0.18} />
@@ -234,6 +253,30 @@ export function CityMap({ height = "100%", events = [], focus, onPick, showHeat 
           12.97°N · 77.59°E
         </span>
       </div>
+      
+      {/* Fullscreen toggle button */}
+      <button
+        onClick={toggleFullscreen}
+        style={{
+          position: "absolute",
+          right: 10,
+          top: 10,
+          padding: "6px",
+          borderRadius: 6,
+          background: "oklch(0.20 0.022 250 / 0.85)",
+          border: "1px solid var(--border)",
+          color: "var(--muted-foreground)",
+          cursor: "pointer",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          transition: "all 0.2s"
+        }}
+        title={isFullscreen ? "Exit fullscreen" : "Fullscreen"}
+      >
+        {isFullscreen ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
+      </button>
+
       <div style={{ position: "absolute", right: 10, bottom: 10, fontSize: 10, fontFamily: "var(--font-mono)", color: "var(--muted-foreground)", letterSpacing: "0.08em" }}>
         BENGALURU · {INCIDENTS.length} INTEL POINTS
       </div>

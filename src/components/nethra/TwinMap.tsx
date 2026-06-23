@@ -4,6 +4,7 @@ import { LANDMARKS } from "@/data/landmarks";
 import { HEX_CELLS } from "@/data/hexgrid";
 import type { PlannedEvent } from "@/lib/intel";
 import { predictImpact, riskBand } from "@/lib/intel";
+import { Maximize2, Minimize2 } from "lucide-react";
 
 type HexCell = { h: string; lat: number; lng: number; total: number; hourly: number[]; corridors: string[] };
 const CELLS = HEX_CELLS as HexCell[];
@@ -39,6 +40,7 @@ export function TwinMap({
   const hexFCRef = useRef<any>(null);
   const readyRef = useRef(false);
   const [ready, setReady] = useState(false);
+  const [isFullscreen, setIsFullscreen] = useState(false);
 
 
   // Init map once
@@ -366,5 +368,59 @@ export function TwinMap({
     mapRef.current.flyTo({ center: [ev.lng, ev.lat], zoom: 13.5, speed: 1.2 });
   }, [focusEventId, events, ready]);
 
-  return <div ref={containerRef} className="rounded-md overflow-hidden" style={{ width: "100%", height: "100%" }} />;
+  // Resize map when fullscreen changes
+  useEffect(() => {
+    if (!ready) return;
+    setTimeout(() => mapRef.current?.resize(), 100);
+  }, [isFullscreen, ready]);
+
+  const toggleFullscreen = () => {
+    setIsFullscreen(!isFullscreen);
+  };
+
+  return (
+    <div 
+      ref={containerRef} 
+      className="rounded-md overflow-hidden relative"
+      style={{ 
+        width: "100%", 
+        height: "100%",
+        ...(isFullscreen ? {
+          position: "fixed",
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          borderRadius: 0,
+          zIndex: 9999,
+          height: "100vh",
+          width: "100vw"
+        } : {})
+      }}
+    >
+      {/* Fullscreen toggle button */}
+      <button
+        onClick={toggleFullscreen}
+        style={{
+          position: "absolute",
+          right: 10,
+          top: 10,
+          padding: "8px",
+          borderRadius: 6,
+          background: "rgba(15, 23, 42, 0.85)",
+          border: "1px solid rgba(148, 163, 184, 0.3)",
+          color: "#e2e8f0",
+          cursor: "pointer",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          transition: "all 0.2s",
+          zIndex: 1000
+        }}
+        title={isFullscreen ? "Exit fullscreen" : "Fullscreen"}
+      >
+        {isFullscreen ? <Minimize2 size={18} /> : <Maximize2 size={18} />}
+      </button>
+    </div>
+  );
 }
