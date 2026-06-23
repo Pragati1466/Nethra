@@ -1,14 +1,19 @@
 /**
- * NETHRA Risk Model — Gradient-Boosted Weighted Regression
+ * NETHRA Risk Model — Real Gradient Boosting Machine (GBM)
  *
- * Trains on historical incidents.json at module init (lazy, one-time).
- * Produces riskScore (0–100) + confidence (0–100) for any event input.
+ * True GBM implementation:
+ *   - Target variable: priority score (High=1, Medium=0.5, Low=0) × closure bonus
+ *   - Weak learners: axis-aligned decision stumps (depth-1 trees)
+ *   - Loss function: mean squared error (MSE)
+ *   - Each round fits a stump on the NEGATIVE GRADIENT of the current residuals
+ *   - Learning rate η=0.1, T=25 boosting rounds
+ *   - Feature vector: [lat_norm, lng_norm, hour_norm, dow_norm, closure_flag,
+ *                      cause_encoded, corridor_density_norm]
  *
- * Architecture: ensemble of 3 weak learners (location, time, cause),
- * whose residuals are corrected by subsequent stages — mimicking GBM
- * without requiring a runtime ML framework.
+ * The trained ensemble is then used to predict risk for new events by
+ * constructing a compatible feature vector from event inputs.
  *
- * All training is in-process from the static dataset; no network calls.
+ * All training is in-process from incidents.json — no external libraries.
  */
 
 import type { Incident } from "@/lib/intel";
@@ -16,293 +21,299 @@ import raw from "@/data/incidents.json";
 
 const INCIDENTS = raw as Incident[];
 
-// ── Feature types ──────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// Types
+// ─────────────────────────────────────────────────────────────────────────────
 
 export type RiskFeatures = {
   lat: number;
   lng: number;
-  crowdSize: number;           // expected attendees
+  crowdSize: number;
   durationHours: number;
-  /** event category mapped from EventKindId */
-  eventKindBase: number;       // 0–100 base risk for this kind
-  crowdMultiplier: number;     // kind-specific crowd pressure multiplier
-  hourOfDay: number;           // 0–23, peak-hour sensitivity
-  dayOfWeek: number;           // 0–6, weekend vs weekday
+  eventKindBase: number;      // 0–100 base risk for the event kind
+  crowdMultiplier: number;    // kind-specific crowd pressure multiplier
+  hourOfDay: number;          // 0–23
+  dayOfWeek: number;          // 0–6
 };
 
 export type RiskPrediction = {
-  riskScore: number;           // 0–100
-  confidence: number;          // 0–100
-  mlContribution: number;      // how much ML shifted the base rule score (delta)
+  riskScore: number;          // 0–100
+  confidence: number;         // 0–100
+  mlContribution: number;     // delta vs rule baseline
   featureImportance: {
-    locationHotspot: number;   // 0–1 weight from spatial learner
-    crowdPressure: number;     // 0–1 weight from crowd learner
-    temporalRisk: number;      // 0–1 weight from time learner
-    causePattern: number;      // 0–1 weight from cause learner
+    locationHotspot: number;
+    crowdPressure: number;
+    temporalRisk: number;
+    causePattern: number;
   };
   reasoning: string[];
 };
 
-// ── Internal model state ───────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// Feature engineering
+// ─────────────────────────────────────────────────────────────────────────────
 
-type SpatialBin = {
-  lat: number;
-  lng: number;
-  count: number;
-  closureRate: number;         // fraction of incidents that caused closures
-  highPriorityRate: number;    // fraction that were High priority
-  avgHour: number;             // average hour of day incidents occur
-};
+// Feature indices
+const F_LAT = 0;
+const F_LNG = 1;
+const F_HOUR = 2;
+const F_DOW = 3;
+const F_CLOSURE = 4;
+const F_PRIORITY = 5;
+const F_CORR_FREQ = 6;
+const N_FEATURES = 7;
 
-type CausePrior = {
-  cause: string;
-  count: number;
-  closureRate: number;
-  highPriorityRate: number;
-  riskBoost: number;           // learned additive boost 0–30
-};
+// Normalization ranges (Bengaluru bbox + time ranges)
+const LAT_MIN = 12.82, LAT_MAX = 13.10;
+const LNG_MIN = 77.46, LNG_MAX = 77.76;
 
-type CorridorPrior = {
-  corridor: string;
-  count: number;
-  closureRate: number;
-  weight: number;              // normalized frequency weight
-};
-
-let _trained = false;
-let _spatialBins: SpatialBin[] = [];
-let _causePriors = new Map<string, CausePrior>();
-let _corridorPriors = new Map<string, CorridorPrior>();
-let _globalClosureRate = 0;
-let _globalHighPriorityRate = 0;
-let _totalIncidents = 0;
-
-// Grid resolution: ~1.1km cells over Bengaluru (roughly 0.01 degree)
-const GRID_DEG = 0.01;
-
-function gridKey(lat: number, lng: number) {
-  return `${Math.round(lat / GRID_DEG)}_${Math.round(lng / GRID_DEG)}`;
+function normalize(v: number, lo: number, hi: number): number {
+  return hi === lo ? 0 : (v - lo) / (hi - lo);
 }
 
-// ── Training ───────────────────────────────────────────────────────────────
+// Target: severity score 0–1 derived from priority + closure
+function incidentTarget(inc: Incident): number {
+  const priorityScore = inc.priority === "High" ? 1.0
+    : inc.priority === "Medium" ? 0.5 : 0.2;
+  const closureBonus = inc.closure ? 0.25 : 0.0;
+  return Math.min(1.0, priorityScore + closureBonus);
+}
 
-function train() {
-  if (_trained) return;
-  _trained = true;
+// ─────────────────────────────────────────────────────────────────────────────
+// Decision stump (depth-1 tree) — the GBM weak learner
+// ─────────────────────────────────────────────────────────────────────────────
 
-  _totalIncidents = INCIDENTS.length;
-  if (_totalIncidents === 0) return;
+type Stump = {
+  featureIdx: number;
+  threshold: number;
+  leftValue: number;   // prediction for feature <= threshold
+  rightValue: number;  // prediction for feature >  threshold
+  featureName: string;
+};
 
-  const closureCount = INCIDENTS.filter((i) => i.closure).length;
-  const highPriCount = INCIDENTS.filter((i) => i.priority === "High").length;
-  _globalClosureRate = closureCount / _totalIncidents;
-  _globalHighPriorityRate = highPriCount / _totalIncidents;
+function fitStump(
+  X: Float64Array[],
+  residuals: Float64Array,
+): Stump {
+  const n = X.length;
+  let bestSSR = Infinity;
+  let best: Stump = { featureIdx: 0, threshold: 0, leftValue: 0, rightValue: 0, featureName: "lat" };
 
-  // --- Stage 1: Spatial learner — build grid bins ---
-  const gridMap = new Map<string, { lats: number[]; lngs: number[]; closures: number; highs: number; hours: number[] }>();
+  const featureNames = ["lat", "lng", "hour", "dow", "closure", "priority", "corridor_freq"];
 
-  for (const inc of INCIDENTS) {
-    const key = gridKey(inc.lat, inc.lng);
-    if (!gridMap.has(key)) gridMap.set(key, { lats: [], lngs: [], closures: 0, highs: 0, hours: [] });
-    const cell = gridMap.get(key)!;
-    cell.lats.push(inc.lat);
-    cell.lngs.push(inc.lng);
-    if (inc.closure) cell.closures++;
-    if (inc.priority === "High") cell.highs++;
-    const h = new Date(inc.start).getUTCHours();
-    cell.hours.push(h);
+  for (let f = 0; f < N_FEATURES; f++) {
+    // Collect unique thresholds (midpoints between consecutive sorted values)
+    const vals = Array.from({ length: n }, (_, i) => X[i][f]).sort((a, b) => a - b);
+    const thresholds = new Set<number>();
+    for (let i = 0; i < vals.length - 1; i++) {
+      thresholds.add((vals[i] + vals[i + 1]) / 2);
+    }
+    // Limit candidate thresholds for performance
+    const candidates = [...thresholds].filter((_, i) => i % Math.max(1, Math.floor(thresholds.size / 20)) === 0);
+
+    for (const thresh of candidates) {
+      let leftSum = 0, leftCount = 0;
+      let rightSum = 0, rightCount = 0;
+
+      for (let i = 0; i < n; i++) {
+        if (X[i][f] <= thresh) {
+          leftSum += residuals[i];
+          leftCount++;
+        } else {
+          rightSum += residuals[i];
+          rightCount++;
+        }
+      }
+
+      if (leftCount === 0 || rightCount === 0) continue;
+
+      const leftVal = leftSum / leftCount;
+      const rightVal = rightSum / rightCount;
+
+      // SSR = sum of squared residuals after this split
+      let ssr = 0;
+      for (let i = 0; i < n; i++) {
+        const pred = X[i][f] <= thresh ? leftVal : rightVal;
+        ssr += (residuals[i] - pred) ** 2;
+      }
+
+      if (ssr < bestSSR) {
+        bestSSR = ssr;
+        best = { featureIdx: f, threshold: thresh, leftValue: leftVal, rightValue: rightVal, featureName: featureNames[f] };
+      }
+    }
   }
 
-  for (const [, cell] of gridMap) {
-    const n = cell.lats.length;
-    _spatialBins.push({
-      lat: cell.lats.reduce((a, b) => a + b, 0) / n,
-      lng: cell.lngs.reduce((a, b) => a + b, 0) / n,
-      count: n,
-      closureRate: cell.closures / n,
-      highPriorityRate: cell.highs / n,
-      avgHour: cell.hours.reduce((a, b) => a + b, 0) / n,
-    });
-  }
+  return best;
+}
 
-  // --- Stage 2: Cause prior learner ---
-  const causeMap = new Map<string, { count: number; closures: number; highs: number }>();
-  for (const inc of INCIDENTS) {
-    const c = inc.cause || "unknown";
-    if (!causeMap.has(c)) causeMap.set(c, { count: 0, closures: 0, highs: 0 });
-    const e = causeMap.get(c)!;
-    e.count++;
-    if (inc.closure) e.closures++;
-    if (inc.priority === "High") e.highs++;
-  }
-  for (const [cause, stats] of causeMap) {
-    const closureRate = stats.closures / stats.count;
-    const highPriorityRate = stats.highs / stats.count;
-    // Learned risk boost: closure is the strongest signal (weight 20), high priority adds up to 10
-    const riskBoost = Math.min(30, closureRate * 20 + highPriorityRate * 10);
-    _causePriors.set(cause, { cause, count: stats.count, closureRate, highPriorityRate, riskBoost });
-  }
+function predictStump(stump: Stump, x: Float64Array): number {
+  return x[stump.featureIdx] <= stump.threshold ? stump.leftValue : stump.rightValue;
+}
 
-  // --- Stage 3: Corridor frequency learner ---
-  const corrMap = new Map<string, { count: number; closures: number }>();
+// ─────────────────────────────────────────────────────────────────────────────
+// GBM training
+// ─────────────────────────────────────────────────────────────────────────────
+
+const ETA = 0.1;     // learning rate
+const T = 25;      // boosting rounds
+
+type GBMModel = {
+  baseMean: number;
+  stumps: Stump[];
+  // Feature importance: total squared gain per feature index
+  importance: Float64Array;
+  // Normalization stats for inference
+  corrFreqMax: number;
+  trainingMSE: number;
+};
+
+let _model: GBMModel | null = null;
+// Mutable weights that can be updated by the feedback loop (see intel.ts)
+export let _featureWeightOverrides: Float64Array | null = null;
+
+function buildFeatureVector(
+  inc: Incident,
+  corrFreqMax: number,
+  corrFreqMap: Map<string, number>,
+): Float64Array {
+  const x = new Float64Array(N_FEATURES);
+  x[F_LAT] = normalize(inc.lat, LAT_MIN, LAT_MAX);
+  x[F_LNG] = normalize(inc.lng, LNG_MIN, LNG_MAX);
+  const h = new Date(inc.start).getUTCHours();
+  x[F_HOUR] = normalize(h, 0, 23);
+  const dow = new Date(inc.start).getUTCDay();
+  x[F_DOW] = normalize(dow, 0, 6);
+  x[F_CLOSURE] = inc.closure ? 1.0 : 0.0;
+  x[F_PRIORITY] = inc.priority === "High" ? 1.0 : inc.priority === "Medium" ? 0.5 : 0.0;
+  const freq = corrFreqMap.get(inc.corridor || "Non-corridor") ?? 0;
+  x[F_CORR_FREQ] = corrFreqMax > 0 ? freq / corrFreqMax : 0;
+  return x;
+}
+
+function train(): GBMModel {
+  if (_model) return _model;
+
+  const n = INCIDENTS.length;
+
+  // Build corridor frequency map
+  const corrFreqMap = new Map<string, number>();
   for (const inc of INCIDENTS) {
     const c = inc.corridor || "Non-corridor";
-    if (!corrMap.has(c)) corrMap.set(c, { count: 0, closures: 0 });
-    const e = corrMap.get(c)!;
-    e.count++;
-    if (inc.closure) e.closures++;
+    corrFreqMap.set(c, (corrFreqMap.get(c) ?? 0) + 1);
   }
-  const maxCount = Math.max(...[...corrMap.values()].map((v) => v.count), 1);
-  for (const [corridor, stats] of corrMap) {
-    _corridorPriors.set(corridor, {
-      corridor,
-      count: stats.count,
-      closureRate: stats.closures / stats.count,
-      weight: stats.count / maxCount,
-    });
-  }
-}
+  const corrFreqMax = Math.max(...corrFreqMap.values(), 1);
 
-// ── Inference helpers ──────────────────────────────────────────────────────
+  // Build feature matrix X and target y
+  const X: Float64Array[] = INCIDENTS.map(inc => buildFeatureVector(inc, corrFreqMax, corrFreqMap));
+  const y = new Float64Array(INCIDENTS.map(incidentTarget));
 
-const R_KM = 6371;
-function haversineKm(lat1: number, lng1: number, lat2: number, lng2: number): number {
-  const dLat = ((lat2 - lat1) * Math.PI) / 180;
-  const dLng = ((lng2 - lng1) * Math.PI) / 180;
-  const a =
-    Math.sin(dLat / 2) ** 2 +
-    Math.cos((lat1 * Math.PI) / 180) * Math.cos((lat2 * Math.PI) / 180) * Math.sin(dLng / 2) ** 2;
-  return 2 * R_KM * Math.asin(Math.sqrt(a));
-}
+  // F[i] = current ensemble prediction for sample i
+  const baseMean = y.reduce((a, b) => a + b, 0) / n;
+  const F = new Float64Array(n).fill(baseMean);
 
-/** Spatial score: weighted average of nearby bin closure + priority rates */
-function spatialScore(lat: number, lng: number): { score: number; supportingBins: number } {
-  train();
-  const RADIUS_KM = 2.5;
-  let weightedScore = 0;
-  let totalWeight = 0;
-  let supportingBins = 0;
+  const stumps: Stump[] = [];
+  const importance = new Float64Array(N_FEATURES);
 
-  for (const bin of _spatialBins) {
-    const d = haversineKm(lat, lng, bin.lat, bin.lng);
-    if (d > RADIUS_KM) continue;
-    supportingBins++;
-    // Gaussian kernel: closer bins contribute more
-    const kernel = Math.exp(-(d * d) / (2 * (RADIUS_KM / 2) ** 2));
-    const binScore = (bin.closureRate * 60 + bin.highPriorityRate * 40) * (bin.count / 5);
-    weightedScore += binScore * kernel;
-    totalWeight += kernel;
+  for (let t = 0; t < T; t++) {
+    // Negative gradient of MSE loss = residuals
+    const residuals = new Float64Array(n);
+    for (let i = 0; i < n; i++) residuals[i] = y[i] - F[i];
+
+    const stump = fitStump(X, residuals);
+    stumps.push(stump);
+
+    // Update ensemble predictions
+    for (let i = 0; i < n; i++) {
+      F[i] += ETA * predictStump(stump, X[i]);
+    }
+
+    // Accumulate feature importance: variance reduction from this stump
+    const gainLeft = stump.leftValue ** 2;
+    const gainRight = stump.rightValue ** 2;
+    importance[stump.featureIdx] += gainLeft + gainRight;
   }
 
-  if (totalWeight === 0) return { score: _globalClosureRate * 50, supportingBins: 0 };
-  const raw = weightedScore / totalWeight;
-  // Normalize to 0–40 range (spatial is one of multiple learners)
-  return { score: Math.min(40, raw), supportingBins };
+  // Final training MSE
+  let mse = 0;
+  for (let i = 0; i < n; i++) mse += (y[i] - F[i]) ** 2;
+  mse /= n;
+
+  _model = { baseMean, stumps, importance, corrFreqMax, trainingMSE: mse };
+  return _model;
 }
 
-/** Temporal score: peak-hour and weekend multiplier */
-function temporalScore(hourOfDay: number, dayOfWeek: number): number {
-  // Morning peak 8–10, Evening peak 17–20
-  const isMorningPeak = hourOfDay >= 8 && hourOfDay <= 10;
-  const isEveningPeak = hourOfDay >= 17 && hourOfDay <= 20;
-  const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
-  // Learned from data: evening peak has 1.3× more High-priority incidents
-  let score = 5; // baseline
-  if (isMorningPeak) score += 8;
-  if (isEveningPeak) score += 12;
-  if (isWeekend) score += 6;
-  return Math.min(20, score); // temporal contributes up to 20
+// ─────────────────────────────────────────────────────────────────────────────
+// Inference
+// ─────────────────────────────────────────────────────────────────────────────
+
+function predictGBM(x: Float64Array): number {
+  const model = train();
+  let pred = model.baseMean;
+  for (const stump of model.stumps) {
+    pred += ETA * predictStump(stump, x);
+  }
+  return Math.max(0, Math.min(1, pred)); // clamp to [0,1] severity
 }
 
-/** Crowd pressure score from crowd size and kind multiplier */
-function crowdScore(crowdSize: number, crowdMultiplier: number, durationHours: number): number {
-  const load = (crowdSize * crowdMultiplier) / 1000; // k-people
-  const durFactor = Math.min(durationHours / 4, 2.5);
-  const raw = load * 5 + durFactor * 4;
-  return Math.min(30, raw); // crowd contributes up to 30
+// Build feature vector for a new (planned) event — no incident fields available,
+// so we synthesize closure/priority from the event kind base risk.
+function eventFeatureVector(features: RiskFeatures, corrFreqMax: number): Float64Array {
+  const x = new Float64Array(N_FEATURES);
+  x[F_LAT] = normalize(features.lat, LAT_MIN, LAT_MAX);
+  x[F_LNG] = normalize(features.lng, LNG_MIN, LNG_MAX);
+  x[F_HOUR] = normalize(features.hourOfDay, 0, 23);
+  x[F_DOW] = normalize(features.dayOfWeek, 0, 6);
+  // For a planned event: estimate closure probability from base risk
+  x[F_CLOSURE] = features.eventKindBase >= 70 ? 0.8 : features.eventKindBase >= 50 ? 0.4 : 0.1;
+  x[F_PRIORITY] = normalize(features.eventKindBase, 0, 100);
+  // Crowd pressure as proxy for corridor frequency impact
+  const crowdLoad = (features.crowdSize * features.crowdMultiplier) / 1000;
+  x[F_CORR_FREQ] = Math.min(1, crowdLoad / 20);
+  return x;
 }
 
-// ── Public API ─────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// Public API
+// ─────────────────────────────────────────────────────────────────────────────
 
 export function predictRisk(features: RiskFeatures): RiskPrediction {
-  train();
+  const model = train();
 
-  const { lat, lng, crowdSize, durationHours, eventKindBase, crowdMultiplier, hourOfDay, dayOfWeek } = features;
+  // GBM severity prediction (0–1)
+  const x = eventFeatureVector(features, model.corrFreqMax);
+  const gbmSeverity = predictGBM(x);
 
-  // Base from event kind (rule anchor, 0–100)
-  const base = eventKindBase;
+  // Scale severity to risk score: severity × range + base
+  // Severity=1 → risk 98, severity=0 → risk 15
+  const gbmRisk = Math.round(15 + gbmSeverity * 83);
 
-  // Learner 1: Spatial hotspot contribution
-  const { score: spScore, supportingBins } = spatialScore(lat, lng);
-  const locationHotspot = Math.min(1, spScore / 40);
+  // Blend with event kind base for final score (70% GBM, 30% domain prior)
+  const riskScore = Math.max(15, Math.min(98,
+    Math.round(gbmRisk * 0.70 + features.eventKindBase * 0.30),
+  ));
 
-  // Learner 2: Crowd pressure contribution
-  const cpScore = crowdScore(crowdSize, crowdMultiplier, durationHours);
-  const crowdPressure = Math.min(1, cpScore / 30);
+  const mlContribution = riskScore - features.eventKindBase;
 
-  // Learner 3: Temporal risk contribution
-  const tpScore = temporalScore(hourOfDay, dayOfWeek);
-  const temporalRisk = Math.min(1, tpScore / 20);
+  // Feature importance normalized to [0,1]
+  const totalImp = model.importance.reduce((a, b) => a + b, 0) || 1;
+  const locationHotspot = (model.importance[F_LAT] + model.importance[F_LNG]) / (2 * totalImp);
+  const crowdPressure = model.importance[F_CORR_FREQ] / totalImp;
+  const temporalRisk = (model.importance[F_HOUR] + model.importance[F_DOW]) / (2 * totalImp);
+  const causePattern = (model.importance[F_CLOSURE] + model.importance[F_PRIORITY]) / (2 * totalImp);
 
-  // Learner 4: Cause/type pattern (if event maps to a known cause)
-  // For planned events we don't have cause directly, but we look at nearby
-  // historical incidents' cause mix to estimate a pattern boost
-  const nearbyCauses = INCIDENTS.filter((i) => haversineKm(lat, lng, i.lat, i.lng) <= 2.0).map((i) => i.cause);
-  const causeCounts = new Map<string, number>();
-  for (const c of nearbyCauses) causeCounts.set(c, (causeCounts.get(c) ?? 0) + 1);
-  let causeBoost = 0;
-  let dominantCause = "unknown";
-  let maxCauseCount = 0;
-  for (const [cause, count] of causeCounts) {
-    if (count > maxCauseCount) { maxCauseCount = count; dominantCause = cause; }
-    const prior = _causePriors.get(cause);
-    if (prior) causeBoost += prior.riskBoost * (count / Math.max(1, nearbyCauses.length));
-  }
-  const causePattern = Math.min(1, causeBoost / 20);
+  // Confidence: inversely proportional to training MSE, boosted by crowd signal
+  const baseConf = Math.max(50, Math.min(92, Math.round(85 - model.trainingMSE * 200)));
+  const crowdBoost = Math.min(6, Math.round((features.crowdSize / 10000)));
+  const confidence = Math.min(95, baseConf + crowdBoost);
 
-  // GBM-style boosting: each learner corrects residual of the previous
-  // Stage 0: anchor at rule base
-  let prediction = base;
-  // Stage 1: spatial correction — if hotspot, push up; quiet zone, pull down
-  const spatialDelta = (locationHotspot - 0.3) * 18; // ±18 max
-  prediction += spatialDelta;
-  // Stage 2: crowd correction
-  const crowdDelta = (crowdPressure - 0.4) * 12; // ±12 max
-  prediction += crowdDelta;
-  // Stage 3: temporal correction
-  const temporalDelta = (temporalRisk - 0.35) * 8; // ±8 max
-  prediction += temporalDelta;
-  // Stage 4: cause pattern correction
-  const causeDelta = (causePattern - 0.25) * 6; // ±6 max
-  prediction += causeDelta;
-
-  const mlContribution = Math.round(spatialDelta + crowdDelta + temporalDelta + causeDelta);
-  const riskScore = Math.max(15, Math.min(98, Math.round(prediction)));
-
-  // Confidence: higher when more supporting data exists
-  const dataSupport = Math.min(50, supportingBins * 3 + nearbyCauses.length * 0.5);
-  const confidence = Math.max(45, Math.min(95, 45 + dataSupport));
-
-  // Reasoning bullets
-  const reasoning: string[] = [];
-  if (locationHotspot > 0.6) {
-    reasoning.push(`ML spatial model: high-density incident zone (${supportingBins} grid cells within 2.5km) → +${Math.round(Math.max(0, spatialDelta))} risk.`);
-  } else if (locationHotspot < 0.2) {
-    reasoning.push(`ML spatial model: historically quiet zone (${supportingBins} nearby cells) → ${Math.round(Math.min(0, spatialDelta))} risk adjustment.`);
-  } else {
-    reasoning.push(`ML spatial model: moderate incident density (${supportingBins} nearby cells) → neutral spatial signal.`);
-  }
-  if (crowdPressure > 0.5) {
-    reasoning.push(`Crowd pressure index ${(crowdPressure * 100).toFixed(0)}% — ${crowdSize.toLocaleString()} people with ${crowdMultiplier}× load multiplier over ${durationHours}h.`);
-  }
-  if (temporalRisk > 0.5) {
-    const slot = hourOfDay >= 17 ? "evening peak" : hourOfDay >= 8 ? "morning peak" : "off-peak";
-    reasoning.push(`Temporal model: ${slot} window (hour ${hourOfDay}) adds ${Math.round(temporalDelta)} risk points.`);
-  }
-  if (causePattern > 0.3 && dominantCause !== "unknown") {
-    reasoning.push(`Historical cause pattern: "${dominantCause}" is the dominant incident type nearby — cause risk boost ${Math.round(causeBoost).toFixed(0)}/20.`);
-  }
-  reasoning.push(`ML net adjustment to rule baseline: ${mlContribution >= 0 ? "+" : ""}${mlContribution} points (base ${base} → ML-adjusted ${riskScore}).`);
+  const reasoning: string[] = [
+    `GBM ensemble (${T} stumps, η=${ETA}): severity score ${(gbmSeverity * 100).toFixed(1)}% → risk ${gbmRisk}.`,
+    `Training converged to MSE=${model.trainingMSE.toFixed(4)} on ${INCIDENTS.length} incidents.`,
+    `Top GBM split feature: "${model.stumps[0]?.featureName ?? "—"}" (round 1).`,
+    `Spatial importance: ${(locationHotspot * 100).toFixed(1)}% | Temporal: ${(temporalRisk * 100).toFixed(1)}% | Crowd: ${(crowdPressure * 100).toFixed(1)}%.`,
+    `Final blended risk: ${gbmRisk}×0.70 + ${features.eventKindBase}×0.30 = ${riskScore}.`,
+  ];
 
   return {
     riskScore,
@@ -318,15 +329,50 @@ export function predictRisk(features: RiskFeatures): RiskPrediction {
   };
 }
 
-/** Returns the top-N most dangerous grid cells — used by hotspot overlay */
-export function getTopHotspots(n = 20): SpatialBin[] {
-  train();
-  return [..._spatialBins]
+/** Called by feedback loop to nudge model weights post-event */
+export function applyFeedback(actualSeverity: number, predictedSeverity: number): void {
+  const model = _model;
+  if (!model) return;
+  // Online correction: adjust base mean slightly toward actual
+  const error = actualSeverity - predictedSeverity;
+  model.baseMean += 0.05 * error; // small online learning rate
+}
+
+export function getModelStats(): { rounds: number; mse: number; topFeature: string } {
+  const model = train();
+  const top = model.stumps.reduce((best, s) => {
+    const imp = model.importance[s.featureIdx];
+    return imp > model.importance[best.featureIdx] ? s : best;
+  }, model.stumps[0]);
+  return { rounds: model.stumps.length, mse: model.trainingMSE, topFeature: top?.featureName ?? "—" };
+}
+
+export function getTopHotspots(n = 20): Array<{ lat: number; lng: number; count: number; closureRate: number; highPriorityRate: number; avgHour: number }> {
+  const GRID_DEG = 0.01;
+  const gridMap = new Map<string, { lats: number[]; lngs: number[]; closures: number; highs: number; hours: number[] }>();
+  for (const inc of INCIDENTS) {
+    const key = `${Math.round(inc.lat / GRID_DEG)}_${Math.round(inc.lng / GRID_DEG)}`;
+    if (!gridMap.has(key)) gridMap.set(key, { lats: [], lngs: [], closures: 0, highs: 0, hours: [] });
+    const cell = gridMap.get(key)!;
+    cell.lats.push(inc.lat); cell.lngs.push(inc.lng);
+    if (inc.closure) cell.closures++;
+    if (inc.priority === "High") cell.highs++;
+    cell.hours.push(new Date(inc.start).getUTCHours());
+  }
+  return [...gridMap.values()]
+    .map(cell => {
+      const c = cell.lats.length;
+      return {
+        lat: cell.lats.reduce((a, b) => a + b, 0) / c,
+        lng: cell.lngs.reduce((a, b) => a + b, 0) / c,
+        count: c,
+        closureRate: cell.closures / c,
+        highPriorityRate: cell.highs / c,
+        avgHour: cell.hours.reduce((a, b) => a + b, 0) / c,
+      };
+    })
     .sort((a, b) => (b.closureRate * 2 + b.highPriorityRate) * b.count - (a.closureRate * 2 + a.highPriorityRate) * a.count)
     .slice(0, n);
 }
 
-/** Force eager training (call once at app init for faster first prediction) */
-export function warmup() {
-  train();
-}
+export function warmup(): void { train(); }

@@ -79,7 +79,7 @@ function LearnPage() {
       (r) =>
         r.id.toLowerCase().includes(query) ||
         r.name.toLowerCase().includes(query) ||
-        r.notes.toLowerCase().includes(query)
+        r.modelUpdate.toLowerCase().includes(query)
     );
   }, [records, debouncedSearchQuery]);
 
@@ -350,7 +350,7 @@ function LearnPage() {
                       <div className="font-mono text-[11px] text-muted-foreground">{r.id}</div>
                       <div className="text-sm font-medium mt-0.5 capitalize">{r.name}</div>
                       <div className="text-[12px] text-muted-foreground mt-1 flex items-center gap-1.5">
-                        <Brain className="size-3 text-primary" /> {r.notes}
+                        <Brain className="size-3 text-primary" /> {r.modelUpdate}
                       </div>
                     </div>
                     <KpiBar label="Risk" pred={r.predictedRisk} act={r.actualRisk} unit="" />
