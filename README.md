@@ -537,5 +537,5 @@ The twin.tsx enables 168-hour traffic replay:
 
 <p align="center">
   <a href="https://github.com/Pragati1466/Nethra">GitHub Repository</a> · 
-  <a href="https://nethra-demo.vercel.app">Live Demo</a>
+  <a href="https://nethra-one.vercel.app/">Live Demo</a>
 </p>
