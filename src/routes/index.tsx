@@ -6,8 +6,8 @@ import { MetricStat } from "@/components/nethra/RiskGauge";
 import { LiveFeed, TrafficPulse, ActiveDeployments, DynamicAlerts } from "@/components/nethra/LiveOps";
 import { ShareButton } from "@/components/ui/share-button";
 import { usePulse } from "@/lib/pulse";
-import { getEvents, subscribe, predictImpact, riskBand, INCIDENTS } from "@/lib/intel";
-import { ArrowRight, Plus, AlertTriangle, Users, Radio, Bot } from "lucide-react";
+import { getEvents, subscribe, predictImpact, riskBand, INCIDENTS, toggleBookmark, isBookmarked } from "@/lib/intel";
+import { ArrowRight, Plus, AlertTriangle, Users, Radio, Bot, Star } from "lucide-react";
 
 
 export const Route = createFileRoute("/")({
@@ -120,7 +120,7 @@ function CommandCenter() {
           subtitle={`Risk-ranked · ${events.length} events`}
           className="col-span-12 lg:col-span-4 h-[560px] flex flex-col"
         >
-          <div className="flex-1 overflow-auto divide-y divide-border">
+          <div className="flex-1 overflow-auto">
             {events.length === 0 ? (
               <div className="flex items-center justify-center h-full text-sm text-muted-foreground">
                 All quiet ✨
@@ -135,37 +135,50 @@ function CommandCenter() {
                 .map(({ e, p }) => {
                   const band = riskBand(p.riskScore);
                   return (
-                    <Link
-                      key={e.id}
-                      to="/events/$eventId"
-                      params={{ eventId: e.id }}
-                      className="block px-4 py-3 hover:bg-accent/40 transition group"
-                    >
-                      <div className="flex items-start gap-3">
-                        <div className="mt-1 size-2.5 rounded-full" style={{ background: band.color, boxShadow: `0 0 0 4px ${band.color}22` }} />
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center justify-between gap-2">
-                            <div className="font-medium text-sm truncate">{e.name}</div>
-                            <span className="font-mono text-xs" style={{ color: band.color }}>{p.riskScore}</span>
+                    <div key={e.id} className="relative group border-b border-border last:border-0">
+                      {/* Star bookmark button */}
+                      <button
+                        onClick={(ev) => { ev.preventDefault(); ev.stopPropagation(); toggleBookmark(e.id); }}
+                        className="absolute right-3 top-3 z-10 p-1 rounded hover:bg-accent/60 transition"
+                        aria-label={isBookmarked(e.id) ? "Remove bookmark" : "Bookmark event"}
+                      >
+                        <Star
+                          className="size-3.5 transition-colors"
+                          fill={isBookmarked(e.id) ? "currentColor" : "none"}
+                          style={{ color: isBookmarked(e.id) ? "var(--warning)" : "var(--muted-foreground)" }}
+                        />
+                      </button>
+                      <Link
+                        to="/events/$eventId"
+                        params={{ eventId: e.id }}
+                        className="block px-4 py-3 hover:bg-accent/40 transition"
+                      >
+                        <div className="flex items-start gap-3">
+                          <div className="mt-1 size-2.5 rounded-full shrink-0" style={{ background: band.color, boxShadow: `0 0 0 4px ${band.color}22` }} />
+                          <div className="flex-1 min-w-0 pr-6">
+                            <div className="flex items-center justify-between gap-2">
+                              <div className="font-medium text-sm truncate">{e.name}</div>
+                              <span className="font-mono text-xs" style={{ color: band.color }}>{p.riskScore}</span>
+                            </div>
+                            <div className="text-xs text-muted-foreground truncate">{e.address}</div>
+                            <div className="mt-1.5 flex items-center gap-1.5">
+                              <Badge tone={e.status === "live" ? "critical" : e.status === "planned" ? "warning" : "muted"}>{e.status}</Badge>
+                              <span className="text-[11px] font-mono text-muted-foreground whitespace-nowrap">
+                                {e.status === "planned" ? (
+                                  <>
+                                    <Users className="inline size-3 mr-0.5" />{e.crowd.toLocaleString()}
+                                  </>
+                                ) : (
+                                  <>{unplannedMetricFor(e)}</>
+                                )}
+                                <span className="inline">· {p.delayMinutes}min delay</span>
+                              </span>
+                            </div>
                           </div>
-                          <div className="text-xs text-muted-foreground truncate">{e.address}</div>
-                          <div className="mt-1.5 flex items-center gap-1.5">
-                            <Badge tone={e.status === "live" ? "critical" : e.status === "planned" ? "warning" : "muted"}>{e.status}</Badge>
-                            <span className="text-[11px] font-mono text-muted-foreground whitespace-nowrap">
-                              {e.status === "planned" ? (
-                                <>
-                                  <Users className="inline size-3 mr-0.5" />{e.crowd.toLocaleString()}
-                                </>
-                              ) : (
-                                <>{unplannedMetricFor(e)}</>
-                              )}
-                              <span className="inline">· {p.delayMinutes}min delay</span>
-                            </span>
-                          </div>
+                          <ArrowRight className="size-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition shrink-0 mt-0.5" />
                         </div>
-                        <ArrowRight className="size-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition" />
-                      </div>
-                    </Link>
+                      </Link>
+                    </div>
                   );
                 })
             )}

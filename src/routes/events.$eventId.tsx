@@ -4,11 +4,11 @@ import { useEffect, useMemo, useState } from "react";
 import { AppShell, Panel, Badge } from "@/components/nethra/AppShell";
 import { CityMap } from "@/components/nethra/CityMap";
 import { RiskGauge, MetricStat } from "@/components/nethra/RiskGauge";
-import { EVENT_KINDS, diversionRoutesFor, explainEvent, getEvent, predictImpact, riskBand, subscribe, updateEvent, recordOutcome } from "@/lib/intel";
+import { EVENT_KINDS, diversionRoutesFor, explainEvent, getEvent, predictImpact, riskBand, subscribe, updateEvent, recordOutcome, toggleBookmark, isBookmarked } from "@/lib/intel";
 import { ExplainabilityPanel } from "@/components/nethra/Explainability";
 import { ImpactPanel } from "@/components/nethra/ImpactPanel";
 import { assessImpact } from "@/lib/impact";
-import { ArrowLeft, Bot, CheckCircle2, Play, Radio, Route as RouteIcon, ShieldCheck, Users } from "lucide-react";
+import { ArrowLeft, Bot, CheckCircle2, Play, Radio, Route as RouteIcon, ShieldCheck, Star, Users } from "lucide-react";
 import { getTiwForEvent } from "@/lib/tiw_store";
 import { deriveCeifromTiwClosure, setLatestClosedIntel } from "@/lib/closed_intel_store";
 
@@ -59,6 +59,17 @@ function EventPage() {
             </button>
             <div className="flex items-center gap-2 flex-wrap">
               <h1 className="text-2xl font-semibold">{event.name}</h1>
+              <button
+                onClick={() => toggleBookmark(event.id)}
+                className="p-1.5 rounded-md hover:bg-accent/50 transition"
+                aria-label={isBookmarked(event.id) ? "Remove bookmark" : "Bookmark this event"}
+              >
+                <Star
+                  className="size-5 transition-colors"
+                  fill={isBookmarked(event.id) ? "currentColor" : "none"}
+                  style={{ color: isBookmarked(event.id) ? "var(--warning)" : "var(--muted-foreground)" }}
+                />
+              </button>
               <Badge tone={event.status === "live" ? "critical" : event.status === "deployed" ? "info" : event.status === "planned" ? "warning" : "muted"}>
                 {event.status}
               </Badge>

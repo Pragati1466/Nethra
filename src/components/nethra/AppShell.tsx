@@ -1,10 +1,11 @@
 import { Link, useRouterState } from "@tanstack/react-router";
-import { Activity, Radio, CalendarPlus, Map, Bot, History, PlayCircle, Shield, Route as RouteIcon, Users, Brain, FileText, Moon, Sun } from "lucide-react";
+import { Activity, Radio, CalendarPlus, Map, Bot, History, PlayCircle, Shield, Route as RouteIcon, Users, Brain, FileText, Moon, Sun, Star } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
 import { cn } from "@/lib/utils";
 import { useTheme } from "@/lib/theme-provider";
 import { BackToTop } from "@/components/ui/back-to-top";
 import { Footer } from "@/components/nethra/Footer";
+import { getBookmarkedEvents, subscribe, toggleBookmark } from "@/lib/intel";
 
 type NavItem = { to: string; label: string; icon: typeof Radio; end?: boolean };
 const nav: NavItem[] = [
@@ -22,6 +23,9 @@ const nav: NavItem[] = [
 
 export function AppShell({ children }: { children: ReactNode }) {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
+  const [bookmarked, setBookmarked] = useState(getBookmarkedEvents());
+  useEffect(() => subscribe(() => setBookmarked([...getBookmarkedEvents()])), []);
+
   return (
     <div className="flex min-h-screen w-full">
       <aside className="hidden md:flex w-60 shrink-0 flex-col border-r border-border bg-panel/80 backdrop-blur">
@@ -40,7 +44,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             </div>
           </Link>
         </div>
-        <nav className="flex-1 px-2 py-3 space-y-0.5">
+        <nav className="flex-1 px-2 py-3 space-y-0.5 overflow-y-auto">
           {nav.map((n) => {
             const Icon = n.icon;
             const active = n.end ? pathname === n.to : pathname.startsWith(n.to);
@@ -60,6 +64,44 @@ export function AppShell({ children }: { children: ReactNode }) {
               </Link>
             );
           })}
+
+          {/* ── Favorites section ── */}
+          <div className="pt-3 pb-1">
+            <div className="flex items-center gap-1.5 px-3 mb-1">
+              <Star className="size-3 text-warning" fill="currentColor" />
+              <span className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground">Favorites</span>
+            </div>
+            {bookmarked.length === 0 ? (
+              <p className="px-3 text-[11px] text-muted-foreground/60 italic">
+                Star an event to pin it here
+              </p>
+            ) : (
+              bookmarked.map((ev) => (
+                <div key={ev.id} className="flex items-center gap-1 pr-1">
+                  <Link
+                    to="/events/$eventId"
+                    params={{ eventId: ev.id }}
+                    className={cn(
+                      "flex-1 flex items-center gap-2 px-3 py-1.5 rounded-md text-xs transition-colors min-w-0",
+                      pathname === `/events/${ev.id}`
+                        ? "bg-warning/10 text-warning border border-warning/20"
+                        : "text-muted-foreground hover:text-foreground hover:bg-accent/40 border border-transparent",
+                    )}
+                  >
+                    <span className="size-1.5 rounded-full bg-warning shrink-0" />
+                    <span className="truncate">{ev.name}</span>
+                  </Link>
+                  <button
+                    onClick={() => toggleBookmark(ev.id)}
+                    className="p-1 rounded hover:bg-accent/60 transition shrink-0"
+                    aria-label="Remove bookmark"
+                  >
+                    <Star className="size-3 text-warning" fill="currentColor" />
+                  </button>
+                </div>
+              ))
+            )}
+          </div>
         </nav>
         <div className="px-3 py-3 border-t border-border text-[11px] font-mono text-muted-foreground space-y-1">
           <div className="flex items-center gap-2">

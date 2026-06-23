@@ -310,6 +310,47 @@ export function updateEvent(id: string, patch: Partial<PlannedEvent>) {
 export function subscribe(fn: () => void) { listeners.add(fn); return () => { listeners.delete(fn); }; }
 function emit() { listeners.forEach((fn) => fn()); }
 
+// ── Bookmark store ─────────────────────────────────────────────────────────
+// Persists to localStorage so bookmarks survive page refresh.
+// Uses the same subscriber pattern so any component re-renders on change.
+
+const BOOKMARK_KEY = "nethra:bookmarks";
+
+function loadBookmarks(): Set<string> {
+  if (typeof window === "undefined") return new Set();
+  try {
+    const raw = window.localStorage.getItem(BOOKMARK_KEY);
+    return raw ? new Set(JSON.parse(raw) as string[]) : new Set();
+  } catch {
+    return new Set();
+  }
+}
+
+function saveBookmarks(set: Set<string>) {
+  if (typeof window === "undefined") return;
+  try { window.localStorage.setItem(BOOKMARK_KEY, JSON.stringify([...set])); } catch { /* quota */ }
+}
+
+let _bookmarks: Set<string> = loadBookmarks();
+
+export function toggleBookmark(eventId: string): void {
+  if (_bookmarks.has(eventId)) {
+    _bookmarks.delete(eventId);
+  } else {
+    _bookmarks.add(eventId);
+  }
+  saveBookmarks(_bookmarks);
+  emit(); // reuse the same listener set — any subscriber re-renders
+}
+
+export function isBookmarked(eventId: string): boolean {
+  return _bookmarks.has(eventId);
+}
+
+export function getBookmarkedEvents(): PlannedEvent[] {
+  return EVENTS.filter((e) => _bookmarks.has(e.id));
+}
+
 function seedEvents(): PlannedEvent[] {
   const now = Date.now();
   return [
