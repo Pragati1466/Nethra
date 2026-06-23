@@ -163,115 +163,40 @@ graph TB
 
 ## 🤖 ML Pipeline
 
-NETHRA's intelligence layer is built around four real ML models trained from historical Bengaluru incident records.
+NETHRA's intelligence layer is built around four real ML models trained on-device from `incidents.json`:
 
 ### 1. Risk Model — Gradient Boosting Machine (GBM)
-
 `src/ml/risk_model.ts`
 
-A GBM-style model trained using boosting rounds on decision stumps. The model learns risk patterns from location, time, corridor frequency, incident severity, and closure history.
-
-**Features**
-- Spatial hotspot contribution
-- Corridor frequency analysis
-- Temporal risk patterns
-- Incident severity weighting
-- Explainable feature attribution
-
-**Output**
-- Risk Score (0–100)
-- Confidence Score
-- Feature Importance
-- Historical Similarity Signals
-
----
+A true GBM trained with 25 boosting rounds (learning rate η=0.1) on decision stumps. Each round fits a stump on the negative gradient of the MSE loss. Feature vector: `[lat, lng, hour, day_of_week, closure_flag, priority_score, corridor_frequency]`. Produces a blended risk score (70% GBM + 30% domain prior) with feature importance attribution and per-stump explanations.
 
 ### 2. Hotspot Model — Kernel Density Estimation (KDE)
-
 `src/ml/hotspot_model.ts`
 
-Gaussian KDE identifies traffic hotspots and impact zones by analyzing historical incident concentration.
-
-**Features**
-- Density estimation
-- Impact radius prediction
-- Corridor stress ranking
-- Junction stress ranking
-- Peak-hour detection
-
-**Output**
-- Density Score
-- Impact Radius
-- High-Stress Corridors
-- Peak Risk Windows
-
----
+Gaussian KDE with bandwidth chosen by Silverman's rule of thumb. Weighted by closure (2×) and high-priority (1.5×) incidents. Outputs a normalized density score (0–1), estimated impact radius, corridor stress rankings, junction stress rankings, and peak-hour buckets for any queried location. Also provides a city-wide heatmap grid for map overlay.
 
 ### 3. Deployment Model — ID3 Decision Tree
-
 `src/ml/deployment_model.ts`
 
-An information-gain based decision tree classifies events into deployment tiers and generates staged operational plans.
-
-**Features**
-- Alpha / Bravo / Charlie classification
-- Risk-based branching
-- Deployment planning
-- Phase-wise operational actions
-
-**Output**
-- Deployment Tier
-- Setup Time Estimate
-- Recommended Actions
-- Confidence Score
-
----
+A real ID3 tree trained by information-gain splitting (entropy reduction) up to depth 4 with minimum 30 samples per leaf. Features: `[priority_score, closure_flag, hour_bucket, corridor_risk]`. The tree structure emerges from data — it is not hand-coded. Classifies events into deployment tiers (Alpha / Bravo / Charlie) and generates phased action plans (pre-event, on-event, post-event) with per-action resource estimates.
 
 ### 4. Resource Model — Multi-Dimensional k-NN
-
 `src/ml/resource_model.ts`
 
-k-Nearest Neighbors predicts field resource demand using historical event similarity.
-
-**Features**
-- Officer estimation
-- Barricade estimation
-- Patrol allocation
-- Staging point recommendation
-- Corridor-aware weighting
-
-**Output**
-- Officers Required
-- Barricades Required
-- Patrol Units
-- Mobile Response Units
-
----
+True k-NN (k=15) in 7-dimensional normalized feature space: `[lat, lng, hour, priority, closure, corridor_frequency, zone_encoded]`. Uses inverse-distance weighting across neighbors to estimate officer and barricade demand. Output is then scaled by crowd size, duration, risk score, and VIP flag. Derives staging points from affected corridors and junctions.
 
 ### Supporting Pipeline Components
 
 | Stage | Implementation |
 |:---|:---|
-| Feature Engineering | `src/ml/astram_pipeline.ts` |
-| Similar Incident Retrieval | `src/ml/astram_pipeline.ts` |
-| Risk Estimation | `src/ml/risk_estimator.ts` |
-| Learning & Calibration | `src/ml/learn_models.ts` |
-| GBM Risk Scoring | `src/ml/risk_model.ts` |
-| KDE Hotspot Analysis | `src/ml/hotspot_model.ts` |
-| ID3 Deployment Planning | `src/ml/deployment_model.ts` |
-| k-NN Resource Recommendation | `src/ml/resource_model.ts` |
-
-### ML Inference Flow
-
-1. Event details are submitted.
-2. GBM predicts risk score.
-3. KDE identifies hotspot density and impact radius.
-4. k-NN recommends officers, barricades, and patrol allocation.
-5. ID3 Decision Tree generates deployment strategy.
-6. Similar historical incidents are retrieved for explainability.
-7. Learning Dashboard tracks prediction quality and calibration over time.
-
-All ML models run directly in TypeScript with no external model APIs or runtime dependencies.
+| Feature engineering + ASTraM scoring | [src/ml/astram_pipeline.ts](src/ml/astram_pipeline.ts) |
+| Similar incident matching (k-NN style) | [src/ml/astram_pipeline.ts](src/ml/astram_pipeline.ts) |
+| Risk estimation entry point | [src/ml/risk_estimator.ts](src/ml/risk_estimator.ts) |
+| Learning & calibration | [src/ml/learn_models.ts](src/ml/learn_models.ts) |
+| GBM risk scoring | [src/ml/risk_model.ts](src/ml/risk_model.ts) |
+| KDE hotspot analysis | [src/ml/hotspot_model.ts](src/ml/hotspot_model.ts) |
+| ID3 deployment planning | [src/ml/deployment_model.ts](src/ml/deployment_model.ts) |
+| k-NN resource recommendation | [src/ml/resource_model.ts](src/ml/resource_model.ts) |
 ---
 
 ## 🛠 Tech Stack
@@ -292,7 +217,20 @@ All ML models run directly in TypeScript with no external model APIs or runtime 
 | ngraph.graph | Latest | Graph data structure for road network |
 | Dexie | Latest | IndexedDB wrapper for audit trail |
 
-### ML & Data
+### ML & Algorithms
+
+| Model / Algorithm | File | Purpose |
+|:---|:---|:---|
+| Gradient Boosting Machine (GBM) | `src/ml/risk_model.ts` | Risk scoring |
+| Kernel Density Estimation (KDE) | `src/ml/hotspot_model.ts` | Hotspot + impact radius |
+| ID3 Decision Tree | `src/ml/deployment_model.ts` | Deployment tier classification |
+| k-Nearest Neighbors (k-NN) | `src/ml/resource_model.ts` | Resource demand estimation |
+| ASTraM-inspired pipeline | `src/ml/astram_pipeline.ts` | Feature engineering + similarity |
+| Dijkstra shortest path | `src/lib/dijkstra.ts` | Route optimization |
+| TSP nearest-neighbor heuristic | `src/lib/tsp.ts` | Patrol route planning |
+
+
+### Data
 
 | Technology | Purpose |
 |:---|:---|
