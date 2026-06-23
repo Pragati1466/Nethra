@@ -46,6 +46,17 @@ export type Alert = {
   ttl: number;         // ticks remaining
 };
 
+export type UnitAssignment = {
+  id: string;
+  unitId: string;
+  unitCallsign: string;
+  eventId: string;
+  eventName: string;
+  assignedAt: number;   // timestamp
+  status: "assigned" | "arrived" | "released";
+  releasedAt?: number;
+};
+
 export type Pulse = {
   tick: number;
   startedAt: number;
@@ -53,6 +64,7 @@ export type Pulse = {
   corridors: Corridor[];
   units: FieldUnit[];
   alerts: Alert[];
+  assignments: UnitAssignment[];
   citywide: {
     avgLoad: number;
     activeUnits: number;
@@ -117,6 +129,7 @@ function seed(): Pulse {
     corridors,
     units,
     alerts: [],
+    assignments: [],
     citywide: { avgLoad: 0, activeUnits: units.length, openIncidents: 0, advisoriesPerMin: 0 },
   };
 }
@@ -160,6 +173,35 @@ function step(): Pulse {
     return { ...u, lat, lng, heading, status, assignedTo };
   });
 
+  // Track unit assignments
+  const assignments: UnitAssignment[] = [...pulse.assignments];
+  units.forEach((u) => {
+    const existingAssignment = assignments.find(a => a.unitId === u.id && a.status !== "released");
+    const event = live.find(e => e.id === u.assignedTo);
+    
+    // New assignment
+    if (u.assignedTo && !existingAssignment && event) {
+      assignments.push({
+        id: `A-${Date.now()}-${u.id}`,
+        unitId: u.id,
+        unitCallsign: u.callsign,
+        eventId: event.id,
+        eventName: event.name,
+        assignedAt: Date.now(),
+        status: "assigned"
+      });
+    }
+    // Unit arrived on scene
+    else if (u.assignedTo && existingAssignment && u.status === "on-scene" && existingAssignment.status === "assigned") {
+      existingAssignment.status = "arrived";
+    }
+    // Unit released (no longer assigned)
+    else if (!u.assignedTo && existingAssignment) {
+      existingAssignment.status = "released";
+      existingAssignment.releasedAt = Date.now();
+    }
+  });
+
   // Alerts: spawn occasionally; age existing ones.
   const aged: Alert[] = pulse.alerts
     .map((a) => ({ ...a, ttl: a.ttl - 1 }))
@@ -194,6 +236,7 @@ function step(): Pulse {
     corridors,
     units,
     alerts: aged.slice(0, 6),
+    assignments,
     citywide: {
       avgLoad,
       activeUnits: units.filter((u) => u.status !== "rtb").length,

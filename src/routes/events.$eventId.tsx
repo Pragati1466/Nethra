@@ -7,6 +7,7 @@ import { RiskGauge, MetricStat } from "@/components/nethra/RiskGauge";
 import { EVENT_KINDS, diversionRoutesFor, explainEvent, getEvent, predictImpact, riskBand, subscribe, updateEvent, recordOutcome, toggleBookmark, isBookmarked } from "@/lib/intel";
 import { ExplainabilityPanel } from "@/components/nethra/Explainability";
 import { ImpactPanel } from "@/components/nethra/ImpactPanel";
+import { UnitAssignmentHistory } from "@/components/nethra/UnitAssignmentHistory";
 import { assessImpact } from "@/lib/impact";
 import { ArrowLeft, Bot, CheckCircle2, Play, Radio, Route as RouteIcon, ShieldCheck, Star, Users } from "lucide-react";
 import { getTiwForEvent } from "@/lib/tiw_store";
@@ -222,6 +223,12 @@ function EventPage() {
         <ImpactPanel impact={assessImpact({ kind: event.kind, lat: event.lat, lng: event.lng, durationHours: event.durationHours, crowd: event.crowd }, prediction)} className="col-span-12" />
 
         <ExplainabilityPanel explanation={explanation} className="col-span-12 lg:col-span-8" />
+
+        <Panel title="Unit Assignment History" subtitle="Track field unit deployments" className="col-span-12 lg:col-span-4">
+          <div className="p-4">
+            <UnitAssignmentHistory eventId={event.id} eventName={event.name} />
+          </div>
+        </Panel>
 
         <Panel title="Ask deeper" className="col-span-12 lg:col-span-4">
           <div className="p-4 space-y-3 text-sm">
