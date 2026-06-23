@@ -1,0 +1,1 @@
+import{r as e}from"./useRouter-ChJlHNRn.js";import{t}from"./AppShell-BLE8NYix.js";import{U as n}from"./index-DfQ2oEuN.js";var r=e(),i=()=>(0,r.jsx)(t,{children:(0,r.jsxs)(`div`,{className:`p-10 text-center text-muted-foreground`,children:[`Event not found. `,(0,r.jsx)(n,{to:`/`,className:`text-primary`,children:`Back to ops`})]})});export{i as notFoundComponent};
