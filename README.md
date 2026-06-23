@@ -142,12 +142,12 @@ graph TB
 
 | Module | Preview |
 |:---:|:---|
-| **Command Center** | <img src="photos/1.png" width="600" alt="Command Center Dashboard" /> |
-| **Digital Twin** | <img src="photos/2.png" width="600" alt="Digital Twin Traffic Replay" /> |
-| **Event Creation** | <img src="photos/3.png" width="600" alt="Create Event with ML Prediction" /> |
-| **AI Strategist** | <img src="photos/4.png" width="600" alt="AI Strategist Chat Assistant" /> |
-| **Learning Dashboard** | <img src="photos/5.png" width="600" alt="Learning Dashboard Analytics" /> |
-| **Demo Mode** | <img src="photos/6.png" width="600" alt="Demo Mode Cinematic Walkthrough" /> |
+| **Command Center** | <img src="1.png" width="600" alt="Command Center Dashboard" /> |
+| **Digital Twin** | <img src="2.png" width="600" alt="Digital Twin Traffic Replay" /> |
+| **Event Creation** | <img src="3.png" width="600" alt="Create Event with ML Prediction" /> |
+| **AI Strategist** | <img src="4.png" width="600" alt="AI Strategist Chat Assistant" /> |
+| **Learning Dashboard** | <img src="5.png" width="600" alt="Learning Dashboard Analytics" /> |
+| **Demo Mode** | <img src="6.png" width="600" alt="Demo Mode Cinematic Walkthrough" /> |
 
 </div>
 
