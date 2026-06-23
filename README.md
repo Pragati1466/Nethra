@@ -57,12 +57,17 @@ The system operates as a single-page React application with all ML models loaded
 | **Predictive Risk Modeling** | Gradient-boosted weighted regression model that scores events (0–100) based on 8,173+ historical incidents, using spatial hotspot analysis, crowd pressure indexing, temporal risk factors, and cause pattern learning. |
 | **Digital Twin Replay** | 168 hour traffic replay with H3 hexagonal spatial indexing (res-9) that visualizes incident density, corridor stress, and temporal patterns across Bengaluru's road network. |
 | **Impact Assessment** | Quantifies citizen impact radius, estimated delay minutes, affected junctions and corridors, and economic loss projections using kernel density estimation. |
+| **Graph-Based Diversion Routing** | Dijkstra algorithm on road network graph for shortest path routing with edge severance at incident locations, computing bypass routes through damaged graph. |
+| **TSP Patrol Route Optimization** | Traveling Salesman Problem solver using greedy nearest-neighbor initialization with 2-opt local search refinement for multi-incident patrol routing. |
 | **Smart Diversion Planning** | Traffic aware alternate route generation that considers corridor load, capacity constraints, and historical closure patterns to recommend optimal bypass routes. |
 | **ML Resource Deployment** | k-NN blend model that recommends optimal officer count, barricade count, patrol units, and mobile units based on risk score, crowd size, duration, and historical incident patterns. |
 | **Decision Tree Deployment Planning** | Learned decision tree structure that outputs staged deployment plans (pre-event, on-event, post-event) with specific actions, timings, and priorities across ALPHA/BRAVO/CHARLIE tiers. |
+| **Unit Assignment History** | Immutable tracking of field unit assignments to events with timestamps, showing which units were assigned, when they arrived, and when they were released. |
 | **Live Operations Pulse** | Real-time simulation of field units, corridor congestion, feed streams, and alerts that updates every 2.5 seconds to provide a live city feel. |
+| **Immutable Audit Trail** | IndexedDB-based logging of all system actions (predictions, diversions, deployments) with timestamps, response times, and export capability. |
 | **AI Strategist** | Chat-based assistant for scenario analysis that provides explainable predictions with factor decomposition, similar historical outcomes, and junction DNA analysis. |
 | **Learning Dashboard** | Model performance tracking with predicted vs actual comparisons, weekly accuracy trends, calibration bins, and historical performance ledger. |
+| **Fullscreen Map Mode** | Expandable map view for better visibility with toggle button and responsive layout adjustments. |
 
 ---
 
@@ -73,12 +78,15 @@ The system operates as a single-page React application with all ML models loaded
 | 1 | **Command Center** | Live operations dashboard with risk-ranked events, real-time corridor congestion, field unit tracking, and alert streaming. |
 | 2 | **Digital Twin** | 168-hour traffic replay with H3 hex grid spatial analysis, incident density visualization, and temporal pattern exploration. |
 | 3 | **Create Event** | Plan new events with ML-powered risk prediction, impact assessment, and resource recommendations. |
-| 4 | **Event Details** | View event details, impact analysis, deployment status, diversion routes, and ML explainability. |
+| 4 | **Event Details** | View event details, impact analysis, deployment status, diversion routes, unit assignment history, and ML explainability. |
 | 5 | **AI Strategist** | Chat-based AI assistant for scenario analysis with explainable predictions and factor decomposition. |
-| 6 | **Diversion Planner** | Traffic-aware route planning with capacity analysis, detour time estimation, and corridor coverage mapping. |
+| 6 | **Diversion Planner** | Traffic-aware route planning with graph-based Dijkstra routing, capacity analysis, detour time estimation, and corridor coverage mapping. |
 | 7 | **Resource Optimization** | City-wide resource roll-up showing officer, barricade, and patrol allocation across all events. |
-| 8 | **Learning Dashboard** | Model performance tracking with predicted vs actual comparisons, weekly accuracy trends, and calibration analysis. |
-| 9 | **Demo Mode** | 90-second cinematic demo of all features with automated scenario walkthrough. |
+| 8 | **Patrol Routes** | TSP-based multi-incident patrol route optimization with greedy nearest-neighbor initialization and 2-opt refinement. |
+| 9 | **Audit Trail** | Immutable system action logs with filtering, export, and aggregate statistics for accountability. |
+| 10 | **Learning Dashboard** | Model performance tracking with predicted vs actual comparisons, weekly accuracy trends, and calibration analysis. |
+| 11 | **Decision Brief** | Executive brief generator with PDF export for stakeholder communication. |
+| 12 | **Demo Mode** | 90-second cinematic demo of all features with automated scenario walkthrough. |
 
 ---
 
@@ -322,6 +330,8 @@ const mlDeployment = buildDeploymentPlan({ riskScore, officers, barricades, ... 
 | Recharts | 2.15 | Declarative charting library |
 | Radix UI | Latest | Accessible component primitives |
 | Vite | 8.0 | Build tool with HMR |
+| ngraph.graph | Latest | Graph data structure for road network |
+| Dexie | Latest | IndexedDB wrapper for audit trail |
 
 ### ML & Data
 
@@ -426,7 +436,11 @@ Nethra/
 │   ├── lib/                         # Core business logic
 │   │   ├── intel.ts                # Prediction engine & ML integration
 │   │   ├── pulse.ts                # Live operations simulation
-│   │   └── impact.ts               # Citizen impact assessment
+│   │   ├── impact.ts               # Citizen impact assessment
+│   │   ├── graph.ts                # Road network graph structure
+│   │   ├── dijkstra.ts             # Dijkstra shortest path algorithm
+│   │   ├── tsp.ts                  # TSP solver for patrol routing
+│   │   └── audit.ts                # IndexedDB audit trail logging
 │   │
 │   ├── data/                        # Static datasets
 │   │   ├── incidents.json          # 8,173+ historical incidents
@@ -444,6 +458,8 @@ Nethra/
 │   │   ├── strategist.tsx          # AI Strategist
 │   │   ├── diversion.tsx           # Diversion Planner
 │   │   ├── resources.tsx           # Resource Optimization
+│   │   ├── patrol.tsx              # Patrol Route Optimizer
+│   │   ├── audit.tsx               # Audit Trail Dashboard
 │   │   ├── learn.tsx               # Learning Dashboard
 │   │   ├── demo.tsx                # Demo Mode
 │   │   └── brief.tsx               # Executive Brief generator
@@ -528,6 +544,27 @@ The twin.tsx enables 168-hour traffic replay:
 3. **Density Visualization** — Heatmap of incident density per hex
 4. **Corridor Stress** — Color-coded by closure rate and frequency
 5. **Pattern Detection** — Peak hour and day-of-week analysis
+
+### Graph-Based Diversion Routing
+
+The graph.ts and dijkstra.ts implement road network routing:
+
+1. **Road Graph Construction** — ngraph.graph creates node-edge structure from Bengaluru corridors
+2. **Nearest Node Lookup** — Finds closest graph node to incident location
+3. **Edge Severance** — Removes edges at incident location to simulate road blockage
+4. **Dijkstra Algorithm** — Priority queue-based shortest path through damaged graph
+5. **Route Restoration** — Restores severed edges after computation
+6. **Audit Logging** — Records routing attempts with response times
+
+### TSP Patrol Route Optimization
+
+The tsp.ts solves multi-incident patrol routing:
+
+1. **Distance Matrix** — Computes all-pairs shortest paths using Dijkstra
+2. **Greedy NN Initialization** — Starts from first node, always visits nearest unvisited
+3. **2-Opt Refinement** — Iteratively reverses path segments to eliminate crossings
+4. **Route Validation** — Ensures all incidents visited with optimal ordering
+5. **Travel Time Estimation** — Calculates total distance and time at 40 km/h average speed
 
 ---
 
