@@ -56,11 +56,30 @@ const ARTERIALS: { name: string; coords: [number, number][] }[] = [
 
 export function CityMap({ height = "100%", events = [], focus, onPick, showHeat = true, routes, units, className }: Props) {
   const svgRef = useRef<SVGSVGElement | null>(null);
+  const containerRef = useRef<HTMLDivElement | null>(null);
   const [hoverPin, setHoverPin] = useState<PlannedEvent | null>(null);
   const [tick, setTick] = useState(0);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+
   useEffect(() => {
     const h = setInterval(() => setTick((t) => t + 1), 2200);
     return () => clearInterval(h);
+  }, []);
+
+  // Keep fullscreen state in sync with browser events (e.g. user presses Escape)
+  useEffect(() => {
+    const onChange = () => setIsFullscreen(!!document.fullscreenElement);
+    document.addEventListener("fullscreenchange", onChange);
+    return () => document.removeEventListener("fullscreenchange", onChange);
+  }, []);
+
+  const toggleFullscreen = useCallback(async () => {
+    if (!containerRef.current) return;
+    if (!document.fullscreenElement) {
+      await containerRef.current.requestFullscreen();
+    } else {
+      await document.exitFullscreen();
+    }
   }, []);
 
   const heatClusters = useMemo(() => {
@@ -92,8 +111,8 @@ export function CityMap({ height = "100%", events = [], focus, onPick, showHeat 
   }
 
   return (
-    <div className={className} style={{
-      height, width: "100%", position: "relative", borderRadius: 8, overflow: "hidden",
+    <div ref={containerRef} className={className} style={{
+      height: isFullscreen ? "100vh" : height, width: "100%", position: "relative", borderRadius: isFullscreen ? 0 : 8, overflow: "hidden",
       background: "radial-gradient(ellipse at center, oklch(0.20 0.03 230), oklch(0.14 0.02 250) 70%)",
       border: "1px solid var(--border)"
     }}>
@@ -237,6 +256,40 @@ export function CityMap({ height = "100%", events = [], focus, onPick, showHeat 
           12.97°N · 77.59°E
         </span>
       </div>
+
+      {/* Fullscreen toggle */}
+      <button
+        onClick={toggleFullscreen}
+        title={isFullscreen ? "Exit fullscreen" : "Expand to fullscreen"}
+        style={{
+          position: "absolute",
+          right: 10,
+          top: 10,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          width: 28,
+          height: 28,
+          borderRadius: 6,
+          background: "oklch(0.20 0.022 250 / 0.85)",
+          border: "1px solid var(--border)",
+          color: "var(--muted-foreground)",
+          cursor: "pointer",
+          transition: "color 0.15s, background 0.15s",
+          zIndex: 10,
+        }}
+        onMouseEnter={(e) => {
+          (e.currentTarget as HTMLButtonElement).style.color = "var(--primary)";
+          (e.currentTarget as HTMLButtonElement).style.background = "oklch(0.25 0.03 250 / 0.95)";
+        }}
+        onMouseLeave={(e) => {
+          (e.currentTarget as HTMLButtonElement).style.color = "var(--muted-foreground)";
+          (e.currentTarget as HTMLButtonElement).style.background = "oklch(0.20 0.022 250 / 0.85)";
+        }}
+      >
+        {isFullscreen ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
+      </button>
+
       <div style={{ position: "absolute", right: 10, bottom: 10, fontSize: 10, fontFamily: "var(--font-mono)", color: "var(--muted-foreground)", letterSpacing: "0.08em" }}>
         BENGALURU · {INCIDENTS.length} INTEL POINTS
       </div>
