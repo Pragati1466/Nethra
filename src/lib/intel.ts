@@ -1,7 +1,23 @@
 // NETHRA intelligence layer — derives predictions, similar incidents, risk
 // scores, recommended deployments from historical incident data. The dataset
 // is internal fuel; it is never displayed as a raw table to the user.
+//
+// ML integration: risk_model (GBM), hotspot_model (KDE), resource_model (k-NN)
+// and deployment_model (decision tree) replace pure rule-based arithmetic.
+// The Prediction type is backward-compatible — all existing consumers unchanged.
 import raw from "@/data/incidents.json";
+import { predictRisk, warmup as warmupRisk } from "@/ml/risk_model";
+import { queryHotspot, warmup as warmupHotspot } from "@/ml/hotspot_model";
+import { recommendResources, warmup as warmupResource } from "@/ml/resource_model";
+import { buildDeploymentPlan, warmup as warmupDeployment } from "@/ml/deployment_model";
+
+// Eager-warm all ML models once at module load (non-blocking micro-tasks)
+// so the first predictImpact() call doesn't pay the training cost.
+if (typeof requestIdleCallback !== "undefined") {
+  requestIdleCallback(() => { warmupRisk(); warmupHotspot(); warmupResource(); warmupDeployment(); });
+} else {
+  setTimeout(() => { warmupRisk(); warmupHotspot(); warmupResource(); warmupDeployment(); }, 0);
+}
 
 export type Incident = {
   id: string;
@@ -29,8 +45,8 @@ export function distanceKm(a: [number, number], b: [number, number]) {
   const s =
     Math.sin(dLat / 2) ** 2 +
     Math.cos((a[0] * Math.PI) / 180) *
-      Math.cos((b[0] * Math.PI) / 180) *
-      Math.sin(dLng / 2) ** 2;
+    Math.cos((b[0] * Math.PI) / 180) *
+    Math.sin(dLng / 2) ** 2;
   return 2 * R * Math.asin(Math.sqrt(s));
 }
 
@@ -48,7 +64,7 @@ export const EVENT_KINDS = [
   { id: "construction", label: "Construction / Roadwork", crowdMult: 0.2, baseRisk: 40 },
   { id: "accident", label: "Major Accident", crowdMult: 0.3, baseRisk: 51 },
   { id: "gathering", label: "Public Gathering", crowdMult: 1.0, baseRisk: 55 },
-  { id: "waterlogging", label: "Waterlogging", crowdMult: 0, baseRisk: 42},
+  { id: "waterlogging", label: "Waterlogging", crowdMult: 0, baseRisk: 42 },
 ] as const;
 export type EventKindId = typeof EVENT_KINDS[number]["id"];
 
@@ -80,6 +96,35 @@ export type Prediction = {
   recommendedBarricades: number;
   diversions: { from: string; to: string; via: string }[];
   reasoning: string[];
+
+  // ── ML-derived metadata (optional — never breaks existing consumers) ────
+  ml?: {
+    /** Net risk delta applied by the GBM model vs the pure rule baseline */
+    riskDelta: number;
+    /** KDE density score at event location (0–1) */
+    hotspotDensity: number;
+    /** Feature importances from the risk model */
+    featureImportance: {
+      locationHotspot: number;
+      crowdPressure: number;
+      temporalRisk: number;
+      causePattern: number;
+    };
+    /** Resource model method description */
+    resourceMethod: string;
+    /** Deployment tier from the decision tree */
+    deploymentTier: "alpha" | "bravo" | "charlie";
+    /** Deployment tier label for display */
+    deploymentTierLabel: string;
+    /** Recommended mobile units */
+    mobileUnits: number;
+    /** Suggested staging points */
+    stagingPoints: string[];
+    /** Peak hours for this zone */
+    peakHours: number[];
+    /** All ML reasoning lines merged */
+    reasoning: string[];
+  };
 };
 
 export function predictImpact(ev: {
@@ -89,6 +134,7 @@ export function predictImpact(ev: {
   const near = nearbyIncidents(ev.lat, ev.lng, 3);
   const closeBy = near.slice(0, 60);
 
+  // ── Corridor / junction / station mix from nearby incidents ──────────────
   const corridorMix = new Map<string, number>();
   const junctionMix = new Map<string, number>();
   const stationMix = new Map<string, number>();
@@ -104,55 +150,143 @@ export function predictImpact(ev: {
   const affectedJunctions = topN(junctionMix, 4);
   const affectedStations = topN(stationMix, 3);
 
-  const density = closeBy.length;                       // historical hot zone?
-  const crowdLoad = (ev.crowd * kind.crowdMult) / 1000; // ~k people
+  const density = closeBy.length;
+  const crowdLoad = (ev.crowd * kind.crowdMult) / 1000;
   const durationFactor = Math.min(ev.durationHours / 4, 2.5);
 
-  let risk = kind.baseRisk + crowdLoad * 4 + density * 0.4 + durationFactor * 6;
-  risk = Math.max(15, Math.min(98, Math.round(risk)));
+  // ── Model 1: Risk — GBM-style weighted regression ─────────────────────────
+  const now = new Date();
+  const mlRisk = predictRisk({
+    lat: ev.lat,
+    lng: ev.lng,
+    crowdSize: ev.crowd,
+    durationHours: ev.durationHours,
+    eventKindBase: kind.baseRisk,
+    crowdMultiplier: kind.crowdMult,
+    hourOfDay: now.getHours(),
+    dayOfWeek: now.getDay(),
+  });
 
-  const confidence = Math.max(45, Math.min(95, 55 + Math.min(35, density)));
-  const impactRadiusKm = +(1 + crowdLoad * 0.25 + durationFactor * 0.3).toFixed(1);
-  const delayMinutes = Math.round(8 + crowdLoad * 6 + density * 0.6 + durationFactor * 5);
+  // ── Model 2: Hotspot — KDE spatial density ────────────────────────────────
+  const hotspot = queryHotspot(ev.lat, ev.lng, 3.0);
 
-  const recommendedOfficers = Math.max(
-    6,
-    Math.round(ev.crowd / 600 + density * 0.15 + (kind.id === "vip" ? 12 : 0)),
+  // Merge ML corridor/junction picks with rule-based ones (ML corridors ranked
+  // by stress weight take priority, fill remainder from frequency-based list)
+  const mlCorridors = hotspot.stressedCorridors.slice(0, 3).map((c) => c.corridor);
+  const mlJunctions = hotspot.stressedJunctions.slice(0, 4).map((j) => j.junction);
+  const mergedCorridors = [...new Set([...mlCorridors, ...affectedCorridors])].slice(0, 3);
+  const mergedJunctions = [...new Set([...mlJunctions, ...affectedJunctions])].slice(0, 4);
+
+  // Use whichever is larger: ML radius or rule radius, as a conservative upper bound
+  const ruleRadiusKm = +(1 + crowdLoad * 0.25 + durationFactor * 0.3).toFixed(1);
+  const impactRadiusKm = +Math.max(ruleRadiusKm, hotspot.estimatedRadiusKm).toFixed(1);
+
+  // Blend ML risk with rule risk: 65% ML, 35% rule for explainability anchor
+  const ruleRisk = Math.max(15, Math.min(98, Math.round(
+    kind.baseRisk + crowdLoad * 4 + density * 0.4 + durationFactor * 6,
+  )));
+  const blendedRisk = Math.max(15, Math.min(98, Math.round(
+    mlRisk.riskScore * 0.65 + ruleRisk * 0.35,
+  )));
+
+  // Confidence: blend ML confidence with data density signal
+  const ruleConfidence = Math.max(45, Math.min(95, 55 + Math.min(35, density)));
+  const confidence = Math.max(45, Math.min(95, Math.round(
+    mlRisk.confidence * 0.6 + ruleConfidence * 0.4,
+  )));
+
+  // Delay: ML density informs how much the rule delay is scaled
+  const ruleDelay = Math.round(8 + crowdLoad * 6 + density * 0.6 + durationFactor * 5);
+  const densityScale = 0.8 + hotspot.densityScore * 0.5; // 0.8–1.3×
+  const delayMinutes = Math.max(5, Math.round(ruleDelay * densityScale));
+
+  // ── Model 3: Resources — k-NN blend ──────────────────────────────────────
+  const mlResources = recommendResources(
+    {
+      lat: ev.lat,
+      lng: ev.lng,
+      crowdSize: ev.crowd,
+      durationHours: ev.durationHours,
+      riskScore: blendedRisk,
+      impactRadiusKm,
+      affectedJunctionCount: mergedJunctions.length,
+      affectedCorridorCount: mergedCorridors.length,
+      isVip: kind.id === "vip",
+    },
+    mergedCorridors,
+    mergedJunctions,
   );
-  const recommendedBarricades = Math.max(
-    4,
-    Math.round(ev.crowd / 1500 + affectedJunctions.length * 2 + impactRadiusKm * 2),
-  );
 
-  const diversions = affectedCorridors.slice(0, 3).map((c, idx) => ({
+  // ── Model 4: Deployment — decision tree ──────────────────────────────────
+  const mlDeployment = buildDeploymentPlan({
+    riskScore: blendedRisk,
+    crowdSize: ev.crowd,
+    durationHours: ev.durationHours,
+    impactRadiusKm,
+    officers: mlResources.officers,
+    barricades: mlResources.barricades,
+    mobileUnits: mlResources.mobileUnits,
+    affectedCorridors: mergedCorridors,
+    affectedJunctions: mergedJunctions,
+    stagingPoints: mlResources.stagingPoints,
+    isPlanned: true, // predictImpact is always called for planned/draft events
+    eventKind: kind.id,
+  });
+
+  // ── Diversions (unchanged shape — needed by existing consumers) ───────────
+  const diversions = mergedCorridors.slice(0, 3).map((c, idx) => ({
     from: c,
-    to: affectedCorridors[(idx + 1) % affectedCorridors.length] ?? "Outer Ring Road",
-    via: affectedJunctions[idx] ?? "Nearest signal",
+    to: mergedCorridors[(idx + 1) % Math.max(1, mergedCorridors.length)] ?? "Outer Ring Road",
+    via: mergedJunctions[idx] ?? "Nearest signal",
   }));
 
-  const reasoning: string[] = [
+  // ── Merged reasoning (rule context + all ML model lines) ─────────────────
+  const ruleReasoning: string[] = [
     `Historical hot-zone score: ${density} incidents recorded within 3 km of this location.`,
     `${kind.label} with ${ev.crowd.toLocaleString()} expected attendees → load index ${crowdLoad.toFixed(1)}k.`,
     `Duration ${ev.durationHours}h widens exposure window by ${(durationFactor * 100 - 100).toFixed(0)}%.`,
-    affectedCorridors.length
-      ? `Primary stress corridors: ${affectedCorridors.join(", ")}.`
+    mergedCorridors.length
+      ? `Primary stress corridors (ML+rule): ${mergedCorridors.join(", ")}.`
       : `No major corridor concentration nearby — pressure stays local.`,
-    `Confidence ${confidence}% based on ${closeBy.length} comparable past incidents.`,
+    `Blended confidence ${confidence}% (ML ${mlRisk.confidence}% × rule ${ruleConfidence}%).`,
   ];
 
+  const allMlReasoning = [
+    ...mlRisk.reasoning,
+    ...hotspot.reasoning,
+    ...mlResources.reasoning,
+    ...mlDeployment.reasoning,
+  ];
+
+  const reasoning = [...ruleReasoning, ...allMlReasoning];
+
   return {
-    riskScore: risk,
+    riskScore: blendedRisk,
     confidence,
     impactRadiusKm,
     delayMinutes,
-    affectedJunctions,
-    affectedCorridors,
+    affectedJunctions: mergedJunctions,
+    affectedCorridors: mergedCorridors,
     affectedStations,
     similarIncidents: closeBy.slice(0, 8).map((x) => x.i),
-    recommendedOfficers,
-    recommendedBarricades,
+    recommendedOfficers: mlResources.officers,
+    recommendedBarricades: mlResources.barricades,
     diversions,
     reasoning,
+
+    // ML metadata — surfaced in UI panels, never breaks existing consumers
+    ml: {
+      riskDelta: mlRisk.mlContribution,
+      hotspotDensity: hotspot.densityScore,
+      featureImportance: mlRisk.featureImportance,
+      resourceMethod: mlResources.mlMethod,
+      deploymentTier: mlDeployment.tier,
+      deploymentTierLabel: mlDeployment.tierLabel,
+      mobileUnits: mlResources.mobileUnits,
+      stagingPoints: mlResources.stagingPoints,
+      peakHours: hotspot.peakHours,
+      reasoning: allMlReasoning,
+    },
   };
 }
 
@@ -208,7 +342,7 @@ function seedEvents(): PlannedEvent[] {
       name: "Silk Board Flyover Accident",
       kind: "accident",
       lat: 12.9177, lng: 77.6238, address: "Silk Board Junction",
-      crowd: 0,startsAt: new Date(now - 45 * 60e3).toISOString(),
+      crowd: 0, startsAt: new Date(now - 45 * 60e3).toISOString(),
       durationHours: 3, notes: "2 lanes blocked", status: "live", createdAt: new Date(now - 45 * 60e3).toISOString(),
     },
     {
@@ -291,8 +425,10 @@ export function rollupResources(): ResourcePool {
     if (e.status === "deployed" || e.status === "live") {
       dO += p.recommendedOfficers; dB += p.recommendedBarricades; dP += patrols;
     }
-    return { id: e.id, name: e.name, status: e.status, risk: p.riskScore,
-      officers: p.recommendedOfficers, barricades: p.recommendedBarricades, patrols };
+    return {
+      id: e.id, name: e.name, status: e.status, risk: p.riskScore,
+      officers: p.recommendedOfficers, barricades: p.recommendedBarricades, patrols
+    };
   });
   return {
     officers: { total: pool.officers, deployed: dO, required: rO },
@@ -481,7 +617,7 @@ export function explainEvent(ev: {
   const similar: SimilarOutcome[] = near.slice(0, 6).map(({ i, d }) => {
     const distScore = Math.max(0, 100 - d * 30);
     const causeBoost = (i.cause.toLowerCase().includes(kind.id) ||
-                       (kind.id === "cricket" && i.cause.toLowerCase().includes("event"))) ? 15 : 0;
+      (kind.id === "cricket" && i.cause.toLowerCase().includes("event"))) ? 15 : 0;
     return {
       id: i.id,
       title: `${i.cause.replace(/_/g, " ")} · ${i.corridor || i.zone || "Bengaluru"}`,
