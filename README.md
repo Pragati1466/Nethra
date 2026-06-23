@@ -84,7 +84,7 @@ The system operates as a single-page React application with all ML models loaded
 
 ## 🏗 Architecture
 
-NETHRA follows a client-side ML architecture with four integrated models:
+NETHRA follows a client-side ML architecture with four integrated models -
 
 ```mermaid
 graph TB
