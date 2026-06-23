@@ -55,9 +55,9 @@ The system operates as a single-page React application with all ML models loaded
 | Capability | Description |
 |:---|:---|
 | **Predictive Risk Modeling** | Gradient-boosted weighted regression model that scores events (0–100) based on 8,173+ historical incidents, using spatial hotspot analysis, crowd pressure indexing, temporal risk factors, and cause pattern learning. |
-| **Digital Twin Replay** | 168-hour traffic replay with H3 hexagonal spatial indexing (res-9) that visualizes incident density, corridor stress, and temporal patterns across Bengaluru's road network. |
+| **Digital Twin Replay** | 168 hour traffic replay with H3 hexagonal spatial indexing (res-9) that visualizes incident density, corridor stress, and temporal patterns across Bengaluru's road network. |
 | **Impact Assessment** | Quantifies citizen impact radius, estimated delay minutes, affected junctions and corridors, and economic loss projections using kernel density estimation. |
-| **Smart Diversion Planning** | Traffic-aware alternate route generation that considers corridor load, capacity constraints, and historical closure patterns to recommend optimal bypass routes. |
+| **Smart Diversion Planning** | Traffic aware alternate route generation that considers corridor load, capacity constraints, and historical closure patterns to recommend optimal bypass routes. |
 | **ML Resource Deployment** | k-NN blend model that recommends optimal officer count, barricade count, patrol units, and mobile units based on risk score, crowd size, duration, and historical incident patterns. |
 | **Decision Tree Deployment Planning** | Learned decision tree structure that outputs staged deployment plans (pre-event, on-event, post-event) with specific actions, timings, and priorities across ALPHA/BRAVO/CHARLIE tiers. |
 | **Live Operations Pulse** | Real-time simulation of field units, corridor congestion, feed streams, and alerts that updates every 2.5 seconds to provide a live city feel. |
