@@ -1,11 +1,12 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import { AppShell, Panel, Badge } from "@/components/nethra/AppShell";
 import { CityMap } from "@/components/nethra/CityMap";
 import { RiskGauge, MetricStat } from "@/components/nethra/RiskGauge";
 import { EVENT_KINDS, type EventKindId, addEvent, predictImpact, riskBand } from "@/lib/intel";
-import { CheckCircle2, MapPin, Sparkles, Users } from "lucide-react";
+import { CheckCircle2, MapPin, Redo2, Sparkles, Undo2, Users } from "lucide-react";
 import { toast } from "sonner";
+import { useFormHistory } from "@/hooks/use-form-history";
 
 export const Route = createFileRoute("/events/new")({
   head: () => ({
@@ -17,15 +18,30 @@ export const Route = createFileRoute("/events/new")({
   component: NewEvent,
 });
 
+type FormState = {
+  name: string;
+  kind: EventKindId;
+  crowd: number;
+  hours: number;
+  startsAt: string;
+  address: string;
+  pin: { lat: number; lng: number } | null;
+};
+
 function NewEvent() {
   const navigate = useNavigate();
-  const [name, setName] = useState("");
-  const [kind, setKind] = useState<EventKindId>("festival");
-  const [crowd, setCrowd] = useState(15000);
-  const [hours, setHours] = useState(4);
-  const [startsAt, setStartsAt] = useState(() => new Date(Date.now() + 6 * 3600e3).toISOString().slice(0, 16));
-  const [pin, setPin] = useState<{ lat: number; lng: number } | null>(null);
-  const [address, setAddress] = useState("");
+
+  const { state, set, undo, redo, canUndo, canRedo, historySize } = useFormHistory<FormState>({
+    name: "",
+    kind: "festival",
+    crowd: 15000,
+    hours: 4,
+    startsAt: new Date(Date.now() + 6 * 3600e3).toISOString().slice(0, 16),
+    address: "",
+    pin: null,
+  });
+
+  const { name, kind, crowd, hours, startsAt, address, pin } = state;
 
   const prediction = useMemo(
     () => pin ? predictImpact({ kind, lat: pin.lat, lng: pin.lng, crowd, durationHours: hours }) : null,
@@ -34,8 +50,10 @@ function NewEvent() {
   const band = prediction ? riskBand(prediction.riskScore) : null;
 
   function handlePick(lat: number, lng: number) {
-    setPin({ lat, lng });
-    if (!address) setAddress(`${lat.toFixed(4)}, ${lng.toFixed(4)} · Bengaluru`);
+    set({
+      pin: { lat, lng },
+      address: state.address || `${lat.toFixed(4)}, ${lng.toFixed(4)} · Bengaluru`,
+    });
   }
 
   function handleCreate() {
@@ -55,12 +73,42 @@ function NewEvent() {
   return (
     <AppShell>
       <div className="p-4 lg:p-6 grid grid-cols-12 gap-4">
-        <div className="col-span-12">
-          <div className="text-[11px] font-mono uppercase tracking-[0.2em] text-primary">Event Creation Center</div>
-          <h1 className="text-2xl font-semibold mt-1">Stage an upcoming event</h1>
-          <p className="text-sm text-muted-foreground mt-1">
-            Click the map to drop a pin, fill in the details, and NETHRA will instantly predict impact, recommend deployment, and stage operational plans.
-          </p>
+        <div className="col-span-12 flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <div className="text-[11px] font-mono uppercase tracking-[0.2em] text-primary">Event Creation Center</div>
+            <h1 className="text-2xl font-semibold mt-1">Stage an upcoming event</h1>
+            <p className="text-sm text-muted-foreground mt-1">
+              Click the map to drop a pin, fill in the details, and NETHRA will instantly predict impact, recommend deployment, and stage operational plans.
+            </p>
+          </div>
+
+          {/* Undo / Redo controls */}
+          <div className="flex items-center gap-1.5">
+            <button
+              onClick={undo}
+              disabled={!canUndo}
+              title={canUndo ? `Undo (${historySize} step${historySize !== 1 ? "s" : ""} available) · Ctrl+Z` : "Nothing to undo"}
+              className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md border border-border text-xs text-muted-foreground hover:text-foreground hover:bg-accent/40 transition disabled:opacity-30 disabled:cursor-not-allowed"
+            >
+              <Undo2 className="size-3.5" />
+              Undo
+              {canUndo && (
+                <span className="ml-0.5 px-1 py-0 rounded bg-muted text-[10px] font-mono">{historySize}</span>
+              )}
+            </button>
+            <button
+              onClick={redo}
+              disabled={!canRedo}
+              title={canRedo ? "Redo · Ctrl+Shift+Z" : "Nothing to redo"}
+              className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md border border-border text-xs text-muted-foreground hover:text-foreground hover:bg-accent/40 transition disabled:opacity-30 disabled:cursor-not-allowed"
+            >
+              <Redo2 className="size-3.5" />
+              Redo
+            </button>
+            <span className="text-[10px] font-mono text-muted-foreground/50 pl-1 hidden sm:block">
+              Ctrl+Z · Ctrl+Shift+Z
+            </span>
+          </div>
         </div>
 
         <Panel title="1 · Pick location" subtitle="Click the map" className="col-span-12 lg:col-span-7 h-[560px] flex flex-col">
@@ -72,16 +120,30 @@ function NewEvent() {
         <Panel title="2 · Event details" className="col-span-12 lg:col-span-5">
           <div className="p-4 space-y-4">
             <Field label="Event name">
-              <input value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Republic Day Parade" className={inputCls} />
+              <input
+                value={name}
+                onChange={(e) => set({ name: e.target.value })}
+                placeholder="e.g. Republic Day Parade"
+                className={inputCls}
+              />
             </Field>
             <Field label="Type">
-              <select value={kind} onChange={(e) => setKind(e.target.value as EventKindId)} className={inputCls}>
+              <select
+                value={kind}
+                onChange={(e) => set({ kind: e.target.value as EventKindId })}
+                className={inputCls}
+              >
                 {EVENT_KINDS.map((k) => <option key={k.id} value={k.id}>{k.label}</option>)}
               </select>
             </Field>
             <Field label="Location">
               <div className="flex gap-2">
-                <input value={address} onChange={(e) => setAddress(e.target.value)} placeholder="Drop a pin on the map" className={inputCls} />
+                <input
+                  value={address}
+                  onChange={(e) => set({ address: e.target.value })}
+                  placeholder="Drop a pin on the map"
+                  className={inputCls}
+                />
                 <div className="grid place-items-center px-3 rounded-md border border-border bg-card/40">
                   <MapPin className={`size-4 ${pin ? "text-success" : "text-muted-foreground"}`} />
                 </div>
@@ -90,16 +152,31 @@ function NewEvent() {
             <div className="grid grid-cols-2 gap-3">
               <Field label="Expected crowd">
                 <div className="relative">
-                  <input type="number" min={0} step={500} value={crowd} onChange={(e) => setCrowd(+e.target.value)} className={inputCls + " pl-8"} />
+                  <input
+                    type="number" min={0} step={500}
+                    value={crowd}
+                    onChange={(e) => set({ crowd: +e.target.value })}
+                    className={inputCls + " pl-8"}
+                  />
                   <Users className="size-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
                 </div>
               </Field>
               <Field label="Duration (hours)">
-                <input type="number" min={1} max={72} value={hours} onChange={(e) => setHours(+e.target.value)} className={inputCls} />
+                <input
+                  type="number" min={1} max={72}
+                  value={hours}
+                  onChange={(e) => set({ hours: +e.target.value })}
+                  className={inputCls}
+                />
               </Field>
             </div>
             <Field label="Starts at">
-              <input type="datetime-local" value={startsAt} onChange={(e) => setStartsAt(e.target.value)} className={inputCls} />
+              <input
+                type="datetime-local"
+                value={startsAt}
+                onChange={(e) => set({ startsAt: e.target.value })}
+                className={inputCls}
+              />
             </Field>
             <button
               disabled={!pin || !name}
