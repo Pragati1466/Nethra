@@ -1,5 +1,5 @@
 import { Link, useRouterState } from "@tanstack/react-router";
-import { Activity, Radio, CalendarPlus, Map, Bot, History, PlayCircle, Shield, Route as RouteIcon, Users, Brain, FileText, Moon, Sun, Star } from "lucide-react";
+import { Activity, Radio, CalendarPlus, Map, Bot, History, PlayCircle, Shield, Route as RouteIcon, Users, Brain, FileText, Moon, Sun, Star, Database, Compass } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
 import { cn } from "@/lib/utils";
 import { useTheme } from "@/lib/theme-provider";
@@ -14,10 +14,12 @@ const nav: NavItem[] = [
   { to: "/events/new", label: "Create Event", icon: CalendarPlus },
   { to: "/diversion", label: "Diversion Planner", icon: RouteIcon },
   { to: "/resources", label: "Resource Optimization", icon: Users },
+  { to: "/patrol", label: "Patrol Routes", icon: Compass },
   { to: "/strategist", label: "AI Strategist", icon: Bot },
   { to: "/replay", label: "Decision Replay", icon: History },
   { to: "/learn", label: "Learn Loop", icon: Brain },
   { to: "/brief", label: "Decision Brief", icon: FileText },
+  { to: "/audit", label: "Audit Trail", icon: Database },
   { to: "/demo", label: "One-Click Demo", icon: PlayCircle },
 ];
 

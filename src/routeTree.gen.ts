@@ -13,10 +13,12 @@ import { Route as TwinRouteImport } from './routes/twin'
 import { Route as StrategistRouteImport } from './routes/strategist'
 import { Route as ResourcesRouteImport } from './routes/resources'
 import { Route as ReplayRouteImport } from './routes/replay'
+import { Route as PatrolRouteImport } from './routes/patrol'
 import { Route as LearnRouteImport } from './routes/learn'
 import { Route as DiversionRouteImport } from './routes/diversion'
 import { Route as DemoRouteImport } from './routes/demo'
 import { Route as BriefRouteImport } from './routes/brief'
+import { Route as AuditRouteImport } from './routes/audit'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as EventsNewRouteImport } from './routes/events.new'
 import { Route as EventsEventIdRouteImport } from './routes/events.$eventId'
@@ -41,6 +43,11 @@ const ReplayRoute = ReplayRouteImport.update({
   path: '/replay',
   getParentRoute: () => rootRouteImport,
 } as any)
+const PatrolRoute = PatrolRouteImport.update({
+  id: '/patrol',
+  path: '/patrol',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const LearnRoute = LearnRouteImport.update({
   id: '/learn',
   path: '/learn',
@@ -61,6 +68,11 @@ const BriefRoute = BriefRouteImport.update({
   path: '/brief',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AuditRoute = AuditRouteImport.update({
+  id: '/audit',
+  path: '/audit',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
@@ -79,10 +91,12 @@ const EventsEventIdRoute = EventsEventIdRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/audit': typeof AuditRoute
   '/brief': typeof BriefRoute
   '/demo': typeof DemoRoute
   '/diversion': typeof DiversionRoute
   '/learn': typeof LearnRoute
+  '/patrol': typeof PatrolRoute
   '/replay': typeof ReplayRoute
   '/resources': typeof ResourcesRoute
   '/strategist': typeof StrategistRoute
@@ -92,10 +106,12 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/audit': typeof AuditRoute
   '/brief': typeof BriefRoute
   '/demo': typeof DemoRoute
   '/diversion': typeof DiversionRoute
   '/learn': typeof LearnRoute
+  '/patrol': typeof PatrolRoute
   '/replay': typeof ReplayRoute
   '/resources': typeof ResourcesRoute
   '/strategist': typeof StrategistRoute
@@ -106,10 +122,12 @@ export interface FileRoutesByTo {
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/audit': typeof AuditRoute
   '/brief': typeof BriefRoute
   '/demo': typeof DemoRoute
   '/diversion': typeof DiversionRoute
   '/learn': typeof LearnRoute
+  '/patrol': typeof PatrolRoute
   '/replay': typeof ReplayRoute
   '/resources': typeof ResourcesRoute
   '/strategist': typeof StrategistRoute
@@ -121,10 +139,12 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/audit'
     | '/brief'
     | '/demo'
     | '/diversion'
     | '/learn'
+    | '/patrol'
     | '/replay'
     | '/resources'
     | '/strategist'
@@ -134,10 +154,12 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/audit'
     | '/brief'
     | '/demo'
     | '/diversion'
     | '/learn'
+    | '/patrol'
     | '/replay'
     | '/resources'
     | '/strategist'
@@ -147,10 +169,12 @@ export interface FileRouteTypes {
   id:
     | '__root__'
     | '/'
+    | '/audit'
     | '/brief'
     | '/demo'
     | '/diversion'
     | '/learn'
+    | '/patrol'
     | '/replay'
     | '/resources'
     | '/strategist'
@@ -161,10 +185,12 @@ export interface FileRouteTypes {
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  AuditRoute: typeof AuditRoute
   BriefRoute: typeof BriefRoute
   DemoRoute: typeof DemoRoute
   DiversionRoute: typeof DiversionRoute
   LearnRoute: typeof LearnRoute
+  PatrolRoute: typeof PatrolRoute
   ReplayRoute: typeof ReplayRoute
   ResourcesRoute: typeof ResourcesRoute
   StrategistRoute: typeof StrategistRoute
@@ -203,6 +229,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ReplayRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/patrol': {
+      id: '/patrol'
+      path: '/patrol'
+      fullPath: '/patrol'
+      preLoaderRoute: typeof PatrolRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/learn': {
       id: '/learn'
       path: '/learn'
@@ -231,6 +264,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof BriefRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/audit': {
+      id: '/audit'
+      path: '/audit'
+      fullPath: '/audit'
+      preLoaderRoute: typeof AuditRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/': {
       id: '/'
       path: '/'
@@ -257,10 +297,12 @@ declare module '@tanstack/react-router' {
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  AuditRoute: AuditRoute,
   BriefRoute: BriefRoute,
   DemoRoute: DemoRoute,
   DiversionRoute: DiversionRoute,
   LearnRoute: LearnRoute,
+  PatrolRoute: PatrolRoute,
   ReplayRoute: ReplayRoute,
   ResourcesRoute: ResourcesRoute,
   StrategistRoute: StrategistRoute,

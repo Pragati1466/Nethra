@@ -16,6 +16,9 @@ import {
   updateEvent,
 } from "@/lib/intel";
 import { getDiversionRoutes, type OsrmRoute } from "@/lib/osrm.functions";
+import { createBengaluruRoadGraph, findNearestNode, severEdgesAtLocation, getPathCoordinates } from "@/lib/graph";
+import { dijkstra } from "@/lib/dijkstra";
+import { logAudit } from "@/lib/audit";
 import {
   ArrowRight,
   CheckCircle2,
@@ -47,6 +50,7 @@ function DiversionPage() {
   const [selectedId, setSelectedId] = useState(ranked[0]?.e.id);
   const selected = ranked.find((r) => r.e.id === selectedId) ?? ranked[0];
   const [chosenRoute, setChosenRoute] = useState<string | null>(null);
+  const [roadGraph] = useState(() => createBengaluruRoadGraph());
 
   const fetchRoutes = useServerFn(getDiversionRoutes);
   const routing = useQuery({
@@ -79,6 +83,52 @@ function DiversionPage() {
   }));
 
   const picked = routes.find((r) => r.id === chosenRoute) ?? routes.find((r) => r.recommended) ?? routes[0];
+
+  // Graph-based diversion routing (fallback/enhancement)
+  const graphRoutes = useMemo(() => {
+    if (!selected) return [];
+    
+    const startTime = performance.now();
+    const nearestNode = findNearestNode(roadGraph, selected.e.lat, selected.e.lng);
+    if (!nearestNode) return [];
+
+    // Sever edges at incident location
+    const severedEdges = severEdgesAtLocation(roadGraph, selected.e.lat, selected.e.lng);
+    
+    // Try to find alternative routes from nearby nodes
+    const alternativeRoutes: any[] = [];
+    roadGraph.nodes.forEach((node) => {
+      if (node.id === nearestNode.id) return;
+      const result = dijkstra(roadGraph, node.id, nearestNode.id);
+      if (result && result.path.length > 1) {
+        alternativeRoutes.push({
+          id: `graph-${node.id}`,
+          name: `Via ${node.id}`,
+          geometry: getPathCoordinates(roadGraph, result.path),
+          distanceKm: result.distance,
+          extraMinutes: (result.distance / 40) * 60,
+          capacityPct: 75,
+          congestionReductionPct: 60,
+          recommended: false,
+        });
+      }
+    });
+
+    // Restore edges
+    severedEdges.forEach((edgeId) => {
+      const [from, to] = edgeId.split('-');
+      roadGraph.graph.addLink(from, to, 1);
+    });
+
+    const responseTime = performance.now() - startTime;
+    logAudit('diversion', { 
+      eventId: selected.e.id, 
+      method: 'graph-based',
+      routesFound: alternativeRoutes.length 
+    }, responseTime);
+
+    return alternativeRoutes.slice(0, 3);
+  }, [selected, roadGraph]);
 
   // Explainability — synthesize the legacy DiversionRoute shape from the
   // OSRM bundle so the existing Explainability panel keeps working.
